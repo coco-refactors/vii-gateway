@@ -3,7 +3,7 @@ const cors = require('cors');
 const config = require('./config');
 const { securityHeaders } = require('./middleware/security');
 const { escapeHtml } = require('./utils/html');
-
+const sessionStore = require('./services/sessionStore');
 const apiRoutes = require('./routes/api');
 
 const app = express();
@@ -26,11 +26,19 @@ app.use('/api', apiRoutes);
 
 // Start server
 app.listen(config.port, () => {
-  
-  console.log(`====================================================`);
-  console.log(`🚀 VAuLT LMS Gateway (LTI 1.3) running on port ${config.port}`);
-  console.log(`📡 VAuLT Backend API Target: ${config.vaultApiUrl}`);
-  console.log(`🌐 Public URL: ${config.gatewayPublicUrl}`);
-  console.log(`🎓 Canvas platform registered: ${listPlatforms().length > 0 ? 'yes' : 'NO (set LTI_* env vars)'}`);
-  console.log(`====================================================`);
+    // Housekeeping: drop expired sessions / login states now and hourly
+    const prune = () => {
+        sessionStore.pruneExpired();
+        ltiState.pruneExpiredStates();
+    };
+    prune();
+    setInterval(prune, 60 * 60 * 1000).unref();
+
+    
+    console.log(`====================================================`);
+    console.log(`🚀 VAuLT LMS Gateway (LTI 1.3) running on port ${config.port}`);
+    console.log(`📡 VAuLT Backend API Target: ${config.vaultApiUrl}`);
+    console.log(`🌐 Public URL: ${config.gatewayPublicUrl}`);
+    console.log(`🎓 Canvas platform registered: ${listPlatforms().length > 0 ? 'yes' : 'NO (set LTI_* env vars)'}`);
+    console.log(`====================================================`);
 });
