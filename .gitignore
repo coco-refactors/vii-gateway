@@ -26,3 +26,5 @@ Thumbs.db
 
 # LTI cryptographic keys
 .secrets/
+
+data/
