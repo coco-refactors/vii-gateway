@@ -211,3 +211,18 @@ router.post(
     noStore(res).send(await renderLaunchPage(session));
   })
 );
+
+/**
+ * Any LtiError (or unexpected failure) inside /lti/* renders a generic, non-leaking error page.
+ */
+// eslint-disable-next-line no-unused-vars
+router.use((err, req, res, next) => {
+  if (err instanceof LtiError) {
+    console.warn(`[LTI Gateway] Launch rejected (${err.code}): ${err.detail || err.publicMessage}`);
+    return renderLtiError(res, err);
+  }
+  console.error(`[LTI Gateway] Unexpected error: ${err.stack || err.message}`);
+  return renderLtiError(res, new LtiError('SERVER_ERROR', 'Something went wrong on our side.', { status: 500 }));
+});
+
+module.exports = router;
