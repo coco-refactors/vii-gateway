@@ -67,3 +67,26 @@ function consumeState(state) {
   }
   return tx;
 }
+
+/**
+ * Validate the `nonce` claim of the (already signature-verified) id_token against the nonce stored
+ * at login. Because the state that carried it is single-use, a nonce can never be accepted twice.
+ */
+function validateNonce(nonceClaim, tx) {
+  if (!nonceClaim || typeof nonceClaim !== 'string') {
+    throw new LtiError('NONCE_MISSING', 'The launch token has no nonce.', { status: 401 });
+  }
+  const a = Buffer.from(nonceClaim, 'utf8');
+  const b = Buffer.from(tx.nonce, 'utf8');
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+    throw new LtiError('NONCE_MISMATCH', 'The launch token does not match this login attempt.', { status: 401 });
+  }
+}
+
+module.exports = {
+  generateState,
+  generateNonce,
+  createLoginTransaction,
+  consumeState,
+  validateNonce,
+};
