@@ -129,3 +129,83 @@ const loginInitiation = asyncHandler(async (req, res) => {
 
 router.get('/login', loginInitiation);
 router.post('/login', loginInitiation);
+
+/**
+ * Primary Canvas LTI 1.3 launch endpoint. Canvas POSTs { id_token, state } here after the OIDC login.
+ */
+router.post(
+  '/launch',
+  asyncHandler(async (req, res) => {
+    const body = req.body || {};
+
+    if (body.error) {
+      throw new LtiError('PLATFORM_AUTH_ERROR', 'Canvas could not authorize this launch.', {
+        status: 401,
+        detail: `${body.error}: ${body.error_description || ''}`,
+      });
+    }
+
+    const tx = ltiState.consumeState(body.state);
+    const platform = findPlatform(tx.issuer, tx.clientId);
+    if (!platform) {
+      throw new LtiError('PLATFORM_UNKNOWN', 'This Canvas account is not registered with VAuLT.', { status: 400 });
+    }
+
+    const payload = await ltiValidator.verifyIdToken(body.id_token, platform);
+
+    ltiState.validateNonce(payload.nonce, tx);
+
+    const launch = ltiValidator.parseLaunch(payload, platform);
+
+    const pKey = platformKey(platform);
+    let questId = launch.customQuestId || sessionStore.getQuestForResource(pKey, launch.resourceLinkId);
+
+    // Provision / log in the Canvas user in VAuLT (no separate Vii login). Non-blocking on failure:
+    // the app can retry through POST /api/session/:token/vault-login.
+    const vaultKey = launch.legacyUserId || launch.sub;
+    const vaultUsername = vaultClient.usernameFor(vaultKey);
+    const vaultAuth = await vaultClient.authenticateUser(vaultKey, { timeout: 5000 });
+
+    const sessionBase = {
+      platformKey: pKey,
+      issuer: platform.issuer,
+      clientId: platform.clientId,
+      deploymentId: launch.deploymentId,
+      sub: launch.sub,
+      role: launch.role,
+      studentName: launch.name,
+      studentEmail: launch.email,
+      courseTitle: launch.courseTitle,
+      resourceLinkId: launch.resourceLinkId,
+      assignmentTitle: launch.assignmentTitle,
+      ags: launch.ags,
+      vaultUsername,
+      vaultProvisioned: Boolean(vaultAuth),
+    };
+
+    // Instructor opened an assignment with no quest assigned yet: let them pick one.
+    if (!questId && launch.isInstructor) {
+      const instructorSession = sessionStore.createSession({ ...sessionBase, questId: null });
+      return noStore(res).send(renderQuestSelector(instructorSession));
+    }
+
+    // Default to the configured quest if still not assigned (students opening an unconfigured assignment)
+    if (!questId) {
+      questId = config.defaultQuestId;
+    }
+
+    // If this user already completed this quest for this assignment, show the completed state.
+    const previous = sessionStore.findLatestSession({
+      platformKey: pKey,
+      resourceLinkId: launch.resourceLinkId,
+      sub: launch.sub,
+      role: launch.role,
+    });
+    const session =
+      previous && previous.isCompleted && previous.questId === questId
+        ? previous
+        : sessionStore.createSession({ ...sessionBase, questId });
+
+    noStore(res).send(await renderLaunchPage(session));
+  })
+);
