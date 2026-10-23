@@ -7,8 +7,10 @@ const router = express.Router();
 const config = require('../config');
 const sessionStore = require('../services/sessionStore');
 const ltiState = require('../services/ltiState');
-
+const ltiValidator = require('../services/ltiValidator');
 const keyStore = require('../services/keyStore');
+const { findPlatform, platformKey } = require('../services/platformRegistry');
+const { findPlatform, platformKey } = require('../services/platformRegistry');
 const { LtiError, renderLtiError } = require('../services/ltiErrors');
 
 
