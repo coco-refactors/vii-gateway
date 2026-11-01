@@ -3,7 +3,11 @@ const cors = require('cors');
 const config = require('./config');
 const { securityHeaders } = require('./middleware/security');
 const { escapeHtml } = require('./utils/html');
+const { listPlatforms } = require('./services/platformRegistry');
 const sessionStore = require('./services/sessionStore');
+const ltiState = require('./services/ltiState');
+
+const ltiRoutes = require('./routes/lti');
 const apiRoutes = require('./routes/api');
 
 const app = express();
@@ -22,6 +26,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
 //Routes
+app.use('/lti', ltiRoutes);
 app.use('/api', apiRoutes);
 
 // Start server

@@ -8,8 +8,17 @@
     "dev": "node --watch src/index.js",
     "test": "node --test --test-concurrency=1 test/*.test.js"
   },
-  "engines": { "node": ">=20" },
-  "keywords": ["vault", "lti", "lti1.3", "canvas", "lms", "gateway"],
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "vault",
+    "lti",
+    "lti1.3",
+    "canvas",
+    "lms",
+    "gateway"
+  ],
   "author": "VAuLT Team",
   "license": "Apache-2.0",
   "dependencies": {

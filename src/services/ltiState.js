@@ -38,6 +38,10 @@ function createLoginTransaction({ platform, targetLinkUri, loginHint, ltiMessage
   return { state, nonce };
 }
 
+function pruneExpiredStates() {
+  return storage.prune(LOGIN_STATES, (r) => r.expiresAt < Date.now());
+}
+
 /**
  * Validate the `state` returned with the launch. A state is single-use: it is deleted the first
  * time it is presented, so a replayed launch is rejected. Returns the stored login transaction.
@@ -87,6 +91,7 @@ module.exports = {
   generateState,
   generateNonce,
   createLoginTransaction,
+  pruneExpiredStates,
   consumeState,
   validateNonce,
 };

@@ -1,0 +1,46 @@
+const crypto = require('crypto');
+const axios = require('axios');
+const config = require('../config');
+
+// Single quest catalog, hard-coded
+const QUESTS = [
+  { id: 1, name: 'Campus Explorer Quest', description: 'Interactive campus exploration with location puzzles.' },
+  { id: 2, name: 'STEM AR Quest: Chemistry Lab', description: 'Scan laboratory targets to solve chemistry challenges.' },
+  { id: 3, name: 'Language & Culture Quest', description: 'Language practice and cultural discovery scavenger hunt.' },
+];
+
+class VaultClient {
+  constructor() {
+    this.baseUrl = config.vaultApiUrl;
+    this.client = axios.create({
+      baseURL: this.baseUrl,
+      timeout: 8000,
+    });
+  }
+
+  getQuestCatalog() {
+    return QUESTS.map((q) => ({ ...q }));
+  }
+
+  /** Quest from the catalog, or null if the id is not a known quest. */
+  findQuest(questId) {
+    const id = parseInt(questId, 10);
+    const quest = QUESTS.find((q) => q.id === id);
+    return quest ? { ...quest } : null;
+  }
+
+  /** Quest details for display; unknown ids fall back to a generic description. */
+  async getQuestDetails(questId) {
+    const quest = this.findQuest(questId);
+    if (quest) return quest;
+    return {
+      id: parseInt(questId, 10),
+      name: `Quest #${questId}`,
+      description:
+        'Explore, solve interactive puzzles, and complete location and AR challenges in the VAuLT mobile app.',
+    };
+  }
+
+}
+
+module.exports = new VaultClient();

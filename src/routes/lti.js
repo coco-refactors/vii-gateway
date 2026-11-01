@@ -10,9 +10,10 @@ const ltiState = require('../services/ltiState');
 const ltiValidator = require('../services/ltiValidator');
 const keyStore = require('../services/keyStore');
 const { findPlatform, platformKey } = require('../services/platformRegistry');
-const { findPlatform, platformKey } = require('../services/platformRegistry');
 const { LtiError, renderLtiError } = require('../services/ltiErrors');
+const { escapeHtml, fillTemplate, asyncHandler } = require('../utils/html');
 
+const noStore = (res) => res.set('Cache-Control', 'no-store');
 
 /**
  * Tool public key set. Paste this URL into the Canvas developer key as "Public JWK URL".
@@ -162,53 +163,11 @@ router.post(
     const pKey = platformKey(platform);
     let questId = launch.customQuestId || sessionStore.getQuestForResource(pKey, launch.resourceLinkId);
 
-    // Provision / log in the Canvas user in VAuLT (no separate Vii login). Non-blocking on failure:
-    // the app can retry through POST /api/session/:token/vault-login.
-    const vaultKey = launch.legacyUserId || launch.sub;
-    const vaultUsername = vaultClient.usernameFor(vaultKey);
-    const vaultAuth = await vaultClient.authenticateUser(vaultKey, { timeout: 5000 });
-
-    const sessionBase = {
-      platformKey: pKey,
-      issuer: platform.issuer,
-      clientId: platform.clientId,
-      deploymentId: launch.deploymentId,
-      sub: launch.sub,
-      role: launch.role,
-      studentName: launch.name,
-      studentEmail: launch.email,
-      courseTitle: launch.courseTitle,
-      resourceLinkId: launch.resourceLinkId,
-      assignmentTitle: launch.assignmentTitle,
-      ags: launch.ags,
-      vaultUsername,
-      vaultProvisioned: Boolean(vaultAuth),
-    };
-
-    // Instructor opened an assignment with no quest assigned yet: let them pick one.
-    if (!questId && launch.isInstructor) {
-      const instructorSession = sessionStore.createSession({ ...sessionBase, questId: null });
-      return noStore(res).send(renderQuestSelector(instructorSession));
-    }
-
     // Default to the configured quest if still not assigned (students opening an unconfigured assignment)
     if (!questId) {
       questId = config.defaultQuestId;
     }
 
-    // If this user already completed this quest for this assignment, show the completed state.
-    const previous = sessionStore.findLatestSession({
-      platformKey: pKey,
-      resourceLinkId: launch.resourceLinkId,
-      sub: launch.sub,
-      role: launch.role,
-    });
-    const session =
-      previous && previous.isCompleted && previous.questId === questId
-        ? previous
-        : sessionStore.createSession({ ...sessionBase, questId });
-
-    noStore(res).send(await renderLaunchPage(session));
   })
 );
 
