@@ -19,6 +19,11 @@ const launchTemplate = fs.readFileSync(
   'utf8'
 );
 
+const selectQuestTemplate = fs.readFileSync(
+  path.join(__dirname, '../views/selectQuest.html'),
+  'utf8'
+);
+
 const noStore = (res) => res.set('Cache-Control', 'no-store');
 
 /**
@@ -170,6 +175,36 @@ async function renderLaunchPage(session) {
     isCompletedDisplay: session.isCompleted ? 'block' : 'none',
     isActiveDisplay: session.isCompleted ? 'none' : 'block',
     roleBadge: session.role === 'instructor' ? '<span class="role-badge">Instructor Preview</span>' : '',
+  });
+}
+
+/**
+ * Builds the instructor quest picker.
+ * Each form includes the instructor's session token to authorize the selection.
+ */
+function renderQuestSelector(session) {
+  const listHtml = vaultClient
+    .getQuestCatalog()
+    .map(
+      (q) => `
+      <div class="quest-item">
+        <div>
+          <h3>${escapeHtml(q.name)}</h3>
+          <p>${escapeHtml(q.description)}</p>
+        </div>
+        <form method="POST" action="/lti/select-quest">
+          <input type="hidden" name="token" value="${escapeHtml(session.token)}">
+          <input type="hidden" name="quest_id" value="${q.id}">
+          <button type="submit" class="btn">Assign Quest</button>
+        </form>
+      </div>
+    `
+    )
+    .join('');
+
+  return fillTemplate(selectQuestTemplate, {
+    assignmentTitle: escapeHtml(session.assignmentTitle),
+    questListHtml: listHtml,
   });
 }
 
