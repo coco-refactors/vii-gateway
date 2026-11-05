@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{questName}} - VAuLT</title>
+<style>
+    body {
+    margin: 0;
+    padding: 20px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        Helvetica, Arial, sans-serif;
+    background-color: #f8fafc;
+    color: #1e293b;
+    }
+
+    .container {
+    max-width: 720px;
+    margin: 20px auto;
+    }
+
+    .card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 32px;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05);
+    }
+
+    .header {
+    border-bottom: 1px solid #edf2f7;
+    padding-bottom: 16px;
+    margin-bottom: 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    }
+
+    .badge {
+    background: #e0f2fe;
+    color: #0369a1;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    }
+
+    .role-badge {
+    background: #fef3c7;
+    color: #92400e;
+    padding: 4px 10px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    }
+
+    h1 {
+    margin: 8px 0 0 0;
+    font-size: 24px;
+    color: #0f172a;
+    }
+
+    p.desc {
+    color: #475569;
+    font-size: 15px;
+    line-height: 1.6;
+    margin-bottom: 28px;
+    }
+
+    .qr-box {
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 28px;
+    text-align: center;
+    margin-bottom: 24px;
+    }
+
+    .qr-box h3 {
+    margin-top: 0;
+    font-size: 18px;
+    color: #0f172a;
+    }
+
+    .qr-box p {
+    color: #64748b;
+    font-size: 14px;
+    max-width: 440px;
+    margin: 0 auto 20px auto;
+    }
+
+    .qr-frame {
+    display: inline-block;
+    background: #ffffff;
+    padding: 12px;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    border: 1px solid #cbd5e1;
+    }
+
+    .qr-frame img {
+    display: block;
+    width: 200px;
+    height: 200px;
+    border-radius: 6px;
+    }
+
+    .mobile-btn {
+    display: inline-block;
+    margin-top: 20px;
+    background: #2563eb;
+    color: #ffffff;
+    padding: 10px 20px;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 14px;
+    transition: background 0.2s;
+    }
+
+    .mobile-btn:hover {
+    background: #1d4ed8;
+    }
+
+    .status-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    color: #64748b;
+    font-size: 13px;
+    }
+
+    .pulse-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    background: #3b82f6;
+    border-radius: 50%;
+    animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+    0% {
+        transform: scale(0.95);
+        opacity: 0.8;
+    }
+    50% {
+        transform: scale(1.3);
+        opacity: 0.3;
+    }
+    100% {
+        transform: scale(0.95);
+        opacity: 0.8;
+    }
+    }
+
+    .completion-banner {
+    display: none;
+    background: #f0fdf4;
+    border: 2px solid #22c55e;
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 24px;
+    text-align: center;
+    }
+
+    .checkmark {
+    font-size: 48px;
+    color: #16a34a;
+    margin-bottom: 8px;
+    }
+</style>
+</head>
+<body>
+<div class="container">
+
+    <!-- Completion Banner -->
+    <div id="completion-banner" class="completion-banner" style="display: {{isCompletedDisplay}};">
+    <div class="checkmark">✓</div>
+    <h2 style="color: #15803d; margin: 0 0 8px 0; font-size: 24px;">Quest Completed!</h2>
+    <p style="color: #166534; font-size: 16px; margin: 0;">
+        Great work! Your progress has been recorded and your score has been submitted directly to Canvas.
+    </p>
+    </div>
+
+    <!-- Active Card -->
+    <div id="active-card" class="card" style="display: {{isActiveDisplay}};">
+    <div class="header">
+        <div>
+        <span class="badge">VAuLT Quest Assignment</span>
+        <h1>{{questName}}</h1>
+        </div>
+        {{roleBadge}}
+    </div>
+
+    <p class="desc">{{questDescription}}</p>
+
+    <div class="qr-box">
+        <h3>Play on Mobile</h3>
+        <p>Scan this QR code using the <strong>VAuLT iOS App</strong> (or your iPhone Camera) to start this quest:</p>
+
+        <div class="qr-frame">
+        <img src="{{qrCodeDataUrl}}" alt="Quest QR Code">
+        </div>
+
+        <div>
+        <a class="mobile-btn" href="{{mobileDeepLink}}">Open directly in VAuLT App</a>
+        </div>
+    </div>
+
+    <div class="status-bar">
+        <span class="pulse-dot"></span>
+        <span>Waiting for completion on mobile... this screen will automatically update.</span>
+    </div>
+    </div>
+
+</div>
+
+<script>
+    (function () {
+    var checkUrl = "{{statusCheckUrl}}";
+    var pollInterval = 3000;
+
+    function pollStatus() {
+        fetch(checkUrl)
+        .then(function (res) {
+            return res.json();
+        })
+        .then(function (data) {
+            if (data && data.completed) {
+            document.getElementById("active-card").style.display = "none";
+            document.getElementById("completion-banner").style.display = "block";
+            return; // Stop polling
+            }
+            setTimeout(pollStatus, pollInterval);
+        })
+        .catch(function () {
+            setTimeout(pollStatus, pollInterval);
+        });
+    }
+
+    if ("{{isCompleted}}" !== "true") {
+        setTimeout(pollStatus, pollInterval);
+    }
+    })();
+</script>
+</body>
+</html>
