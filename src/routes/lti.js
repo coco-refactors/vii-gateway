@@ -292,6 +292,35 @@ router.post(
 );
 
 /**
+ * Validates the instructor session and selected quest,
+ * then saves the quest choice for that Canvas assignment.
+ */
+router.post(
+  '/select-quest',
+  asyncHandler(async (req, res) => {
+    const { token, quest_id: questIdRaw } = req.body || {};
+    const session = sessionStore.getSession(token);
+    if (!session || session.role !== 'instructor') {
+      throw new LtiError('FORBIDDEN', 'Only an instructor launched from Canvas can assign a quest.', { status: 403 });
+    }
+    const quest = vaultClient.findQuest(questIdRaw);
+    if (!quest) {
+      throw new LtiError('QUEST_INVALID', 'That quest does not exist.', { status: 400 });
+    }
+
+    sessionStore.bindQuestToResource(session.platformKey, session.resourceLinkId, quest.id);
+    sessionStore.updateSession(token, { questId: quest.id });
+
+    noStore(res).send(`
+    <div style="font-family: sans-serif; padding: 32px; text-align: center; color: #166534; background: #f0fdf4; border-radius: 12px; margin: 30px auto; max-width: 600px;">
+      <h2>✓ Quest Assigned Successfully!</h2>
+      <p>This Canvas assignment has been linked to <strong>${escapeHtml(quest.name)}</strong>. Please refresh or reopen the assignment.</p>
+    </div>
+  `);
+  })
+);
+
+/**
  * Any LtiError (or unexpected failure) inside /lti/* renders a generic, non-leaking error page.
  */
 // eslint-disable-next-line no-unused-vars
