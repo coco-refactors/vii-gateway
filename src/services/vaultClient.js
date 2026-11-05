@@ -41,6 +41,17 @@ class VaultClient {
     };
   }
 
+  /**
+   * Builds a consistent VAuLT username from a Canvas user ID.
+   * Adds a short hash when removing special characters to reduce username collisions.
+   */
+  usernameFor(canvasUserId) {
+    const raw = String(canvasUserId);
+    const safe = raw.replace(/[^a-zA-Z0-9_-]/g, '');
+    if (safe === raw && safe.length > 0) return `canvas_${safe}`;
+    const hash = crypto.createHash('sha1').update(raw).digest('hex').slice(0, 8);
+    return `canvas_${safe}_${hash}`;
+  }
 }
 
 module.exports = new VaultClient();
