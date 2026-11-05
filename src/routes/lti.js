@@ -231,6 +231,19 @@ router.post(
       questId = config.defaultQuestId;
     }
 
+    // Reuse a completed session for this quest, or create a new session.
+    const previous = sessionStore.findLatestSession({
+      platformKey: pKey,
+      resourceLinkId: launch.resourceLinkId,
+      sub: launch.sub,
+      role: launch.role,
+    });
+    const session =
+      previous && previous.isCompleted && previous.questId === questId
+        ? previous
+        : sessionStore.createSession({ ...sessionBase, questId });
+
+    noStore(res).send(await renderLaunchPage(session));
   })
 );
 
