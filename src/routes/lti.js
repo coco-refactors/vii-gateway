@@ -6,12 +6,18 @@ const router = express.Router();
 
 const config = require('../config');
 const sessionStore = require('../services/sessionStore');
+const vaultClient = require('../services/vaultClient');
 const ltiState = require('../services/ltiState');
 const ltiValidator = require('../services/ltiValidator');
 const keyStore = require('../services/keyStore');
 const { findPlatform, platformKey } = require('../services/platformRegistry');
 const { LtiError, renderLtiError } = require('../services/ltiErrors');
 const { escapeHtml, fillTemplate, asyncHandler } = require('../utils/html');
+
+const launchTemplate = fs.readFileSync(
+  path.join(__dirname, '../views/launch.html'),
+  'utf8'
+);
 
 const noStore = (res) => res.set('Cache-Control', 'no-store');
 
@@ -132,6 +138,40 @@ const loginInitiation = asyncHandler(async (req, res) => {
 
 router.get('/login', loginInitiation);
 router.post('/login', loginInitiation);
+
+/**
+ * Build the launch page (QR code + live status) for a session.
+ */
+async function renderLaunchPage(session) {
+  const mobileDeepLink = `vault://quest/${session.questId}?token=${session.token}&gateway=${encodeURIComponent(
+    config.gatewayPublicUrl
+  )}`;
+
+  let qrCodeDataUrl = '';
+  try {
+    qrCodeDataUrl = await QRCode.toDataURL(mobileDeepLink, {
+      width: 220,
+      margin: 1,
+      color: { dark: '#0f172a', light: '#ffffff' },
+    });
+  } catch (err) {
+    console.error(`[LTI Gateway] QR Code generation error: ${err.message}`);
+  }
+
+  const questDetails = await vaultClient.getQuestDetails(session.questId);
+
+  return fillTemplate(launchTemplate, {
+    questName: escapeHtml(questDetails.name),
+    questDescription: escapeHtml(questDetails.description),
+    qrCodeDataUrl: escapeHtml(qrCodeDataUrl),
+    mobileDeepLink: escapeHtml(mobileDeepLink),
+    statusCheckUrl: `/api/status/${session.token}`,
+    isCompleted: String(session.isCompleted),
+    isCompletedDisplay: session.isCompleted ? 'block' : 'none',
+    isActiveDisplay: session.isCompleted ? 'none' : 'block',
+    roleBadge: session.role === 'instructor' ? '<span class="role-badge">Instructor Preview</span>' : '',
+  });
+}
 
 /**
  * Primary Canvas LTI 1.3 launch endpoint. Canvas POSTs { id_token, state } here after the OIDC login.
