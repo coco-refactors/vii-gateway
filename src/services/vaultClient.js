@@ -52,6 +52,39 @@ class VaultClient {
     const hash = crypto.createHash('sha1').update(raw).digest('hex').slice(0, 8);
     return `canvas_${safe}_${hash}`;
   }
+
+  /**
+   * Builds the Canvas user's VAuLT username and requests a guest login.
+   * Returns the login data, or null if authentication fails.
+   */
+  async authenticateUser(canvasUserId, { timeout } = {}) {
+    return this.authenticateUsername(this.usernameFor(canvasUserId), { timeout });
+  }
+
+  /**
+   * Requests a VAuLT guest login using an existing username.
+   * Returns the login data, or null if authentication fails.
+   */
+  async authenticateUsername(username, { timeout } = {}) {
+    try {
+      const form = new URLSearchParams();
+      form.append('type', 'guest');
+      form.append('username', username);
+
+      const res = await this.client.post('/api/authenticate', form.toString(), {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        ...(timeout ? { timeout } : {}),
+      });
+
+      if (res.data && res.data.returnCode === 0) {
+        return res.data.data;
+      }
+      return null;
+    } catch (err) {
+      console.warn(`[VaultClient] Failed to authenticate user ${username} in VAuLT: ${err.message}`);
+      return null;
+    }
+  }
 }
 
 module.exports = new VaultClient();
