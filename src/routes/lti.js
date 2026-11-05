@@ -261,6 +261,15 @@ router.post(
       vaultProvisioned: Boolean(vaultAuth),
     };
 
+     // Show the quest picker when an instructor launches an unassigned quest.
+    if (!questId && launch.isInstructor) {
+      const instructorSession = sessionStore.createSession({
+        ...sessionBase,
+        questId: null,
+      });
+      return noStore(res).send(renderQuestSelector(instructorSession));
+    }
+
     // Default to the configured quest if still not assigned (students opening an unconfigured assignment)
     if (!questId) {
       questId = config.defaultQuestId;
