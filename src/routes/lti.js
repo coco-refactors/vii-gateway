@@ -203,6 +203,29 @@ router.post(
     const pKey = platformKey(platform);
     let questId = launch.customQuestId || sessionStore.getQuestForResource(pKey, launch.resourceLinkId);
 
+    // Request a VAuLT guest login using the verified Canvas identity.
+    // If login fails, continue and record the failure in the session.
+    const vaultKey = launch.legacyUserId || launch.sub;
+    const vaultUsername = vaultClient.usernameFor(vaultKey);
+    const vaultAuth = await vaultClient.authenticateUser(vaultKey, { timeout: 5000 });
+
+    const sessionBase = {
+      platformKey: pKey,
+      issuer: platform.issuer,
+      clientId: platform.clientId,
+      deploymentId: launch.deploymentId,
+      sub: launch.sub,
+      role: launch.role,
+      studentName: launch.name,
+      studentEmail: launch.email,
+      courseTitle: launch.courseTitle,
+      resourceLinkId: launch.resourceLinkId,
+      assignmentTitle: launch.assignmentTitle,
+      ags: launch.ags,
+      vaultUsername,
+      vaultProvisioned: Boolean(vaultAuth),
+    };
+
     // Default to the configured quest if still not assigned (students opening an unconfigured assignment)
     if (!questId) {
       questId = config.defaultQuestId;
