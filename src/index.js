@@ -9,6 +9,7 @@ const ltiState = require('./services/ltiState');
 
 const ltiRoutes = require('./routes/lti');
 const apiRoutes = require('./routes/api');
+const mobileRoutes = require('./routes/mobile');
 
 const app = express();
 
@@ -25,9 +26,18 @@ app.use(express.urlencoded({ extended: true }));
 // Parse application/json
 app.use(express.json());
 
-//Routes
+// Routes
 app.use('/lti', ltiRoutes);
 app.use('/api', apiRoutes);
+app.use('/launch', mobileRoutes);
+
+// Last-resort handlers: unknown routes and unexpected errors (JSON for non-LTI routes).
+app.use((req, res) => res.status(404).json({ error: 'Not found' }));
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+    console.error(`[Gateway] Unhandled error on ${req.method} ${req.originalUrl}: ${err.stack || err.message}`);
+    res.status(err.status || 500).json({ error: 'Internal server error' });
+});
 
 // Start server
 app.listen(config.port, () => {
