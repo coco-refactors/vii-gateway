@@ -1,251 +1,272 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>{{questName}} - VAuLT</title>
-<style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{questName}} - VAuLT</title>
+  <style>
     body {
-    margin: 0;
-    padding: 20px;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-        Helvetica, Arial, sans-serif;
-    background-color: #f8fafc;
-    color: #1e293b;
+      margin: 0;
+      padding: 20px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: #f8fafc;
+      color: #1e293b;
     }
-
     .container {
-    max-width: 720px;
-    margin: 20px auto;
+      max-width: 720px;
+      margin: 20px auto;
     }
-
     .card {
-    background: #ffffff;
-    border: 1px solid #e2e8f0;
-    border-radius: 16px;
-    padding: 32px;
-    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05);
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 16px;
+      padding: 32px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05);
     }
-
     .header {
-    border-bottom: 1px solid #edf2f7;
-    padding-bottom: 16px;
-    margin-bottom: 24px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+      border-bottom: 1px solid #edf2f7;
+      padding-bottom: 16px;
+      margin-bottom: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
     }
-
     .badge {
-    background: #e0f2fe;
-    color: #0369a1;
-    padding: 4px 10px;
-    border-radius: 20px;
-    font-size: 12px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+      background: #e0f2fe;
+      color: #0369a1;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
     }
-
     .role-badge {
-    background: #fef3c7;
-    color: #92400e;
-    padding: 4px 10px;
-    border-radius: 8px;
-    font-size: 13px;
-    font-weight: 500;
+      background: #fef3c7;
+      color: #92400e;
+      padding: 4px 10px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
     }
-
     h1 {
-    margin: 8px 0 0 0;
-    font-size: 24px;
-    color: #0f172a;
+      margin: 8px 0 0 0;
+      font-size: 24px;
+      color: #0f172a;
     }
-
     p.desc {
-    color: #475569;
-    font-size: 15px;
-    line-height: 1.6;
-    margin-bottom: 28px;
+      color: #475569;
+      font-size: 15px;
+      line-height: 1.6;
+      margin-bottom: 28px;
     }
-
     .qr-box {
-    background: #f1f5f9;
-    border: 1px solid #e2e8f0;
-    border-radius: 12px;
-    padding: 28px;
-    text-align: center;
-    margin-bottom: 24px;
+      background: #f1f5f9;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 28px;
+      text-align: center;
+      margin-bottom: 24px;
     }
-
     .qr-box h3 {
-    margin-top: 0;
-    font-size: 18px;
-    color: #0f172a;
+      margin-top: 0;
+      font-size: 18px;
+      color: #0f172a;
     }
-
     .qr-box p {
-    color: #64748b;
-    font-size: 14px;
-    max-width: 440px;
-    margin: 0 auto 20px auto;
+      color: #64748b;
+      font-size: 14px;
+      max-width: 440px;
+      margin: 0 auto 20px auto;
     }
-
     .qr-frame {
-    display: inline-block;
-    background: #ffffff;
-    padding: 12px;
-    border-radius: 12px;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-    border: 1px solid #cbd5e1;
+      display: inline-block;
+      background: #ffffff;
+      padding: 12px;
+      border-radius: 12px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+      border: 1px solid #cbd5e1;
     }
-
     .qr-frame img {
-    display: block;
-    width: 200px;
-    height: 200px;
-    border-radius: 6px;
+      display: block;
+      width: 200px;
+      height: 200px;
+      border-radius: 6px;
     }
-
     .mobile-btn {
-    display: inline-block;
-    margin-top: 20px;
-    background: #2563eb;
-    color: #ffffff;
-    padding: 10px 20px;
-    border-radius: 8px;
-    text-decoration: none;
-    font-weight: 600;
-    font-size: 14px;
-    transition: background 0.2s;
+      display: inline-block;
+      margin-top: 20px;
+      background: #2563eb;
+      color: #ffffff;
+      padding: 10px 20px;
+      border-radius: 8px;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 14px;
+      transition: background 0.2s;
     }
-
     .mobile-btn:hover {
-    background: #1d4ed8;
+      background: #1d4ed8;
     }
-
     .status-bar {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    color: #64748b;
-    font-size: 13px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      color: #64748b;
+      font-size: 13px;
     }
-
     .pulse-dot {
-    display: inline-block;
-    width: 10px;
-    height: 10px;
-    background: #3b82f6;
-    border-radius: 50%;
-    animation: pulse 1.5s infinite;
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      background: #3b82f6;
+      border-radius: 50%;
+      animation: pulse 1.5s infinite;
     }
-
     @keyframes pulse {
-    0% {
-        transform: scale(0.95);
-        opacity: 0.8;
+      0% { transform: scale(0.95); opacity: 0.8; }
+      50% { transform: scale(1.3); opacity: 0.3; }
+      100% { transform: scale(0.95); opacity: 0.8; }
     }
-    50% {
-        transform: scale(1.3);
-        opacity: 0.3;
+      .attempt-banner {
+      display: none;
+      background: #f0fdf4;
+      border: 2px solid #22c55e;
+      border-radius: 12px;
+      padding: 16px 20px;
+      margin-bottom: 20px;
+      color: #166534;
+      font-size: 15px;
     }
-    100% {
-        transform: scale(0.95);
-        opacity: 0.8;
+    .note {
+      color: #64748b;
+      font-size: 12px;
+      margin-top: 12px;
     }
+    .roster {
+      margin-top: 24px;
+      border-top: 1px solid #edf2f7;
+      padding-top: 16px;
+      font-size: 14px;
     }
-
-    .completion-banner {
-    display: none;
-    background: #f0fdf4;
-    border: 2px solid #22c55e;
-    border-radius: 12px;
-    padding: 24px;
-    margin-bottom: 24px;
-    text-align: center;
+    .roster table {
+      border-collapse: collapse;
+      width: 100%;
+      margin-top: 12px;
     }
-
-    .checkmark {
-    font-size: 48px;
-    color: #16a34a;
-    margin-bottom: 8px;
+    .roster td, .roster th {
+      border-bottom: 1px solid #e2e8f0;
+      padding: 6px 8px;
+      text-align: left;
+      font-family: ui-monospace, Menlo, monospace;
+      font-size: 12px;
     }
-</style>
+    .secondary-btn {
+      background: #e2e8f0;
+      color: #0f172a;
+      border: none;
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+  </style>
 </head>
 <body>
-<div class="container">
+  <div class="container">
 
-    <!-- Completion Banner -->
-    <div id="completion-banner" class="completion-banner" style="display: {{isCompletedDisplay}};">
-    <div class="checkmark">✓</div>
-    <h2 style="color: #15803d; margin: 0 0 8px 0; font-size: 24px;">Quest Completed!</h2>
-    <p style="color: #166534; font-size: 16px; margin: 0;">
-        Great work! Your progress has been recorded and your score has been submitted directly to Canvas.
-    </p>
+    <!-- Latest attempt (read live from Vii; the gateway keeps no completion data) -->
+    <div id="attempt-banner" class="attempt-banner" style="display: {{attemptDisplay}};">
+      <strong>&#10003;</strong> <span id="attempt-text">{{attemptText}}</span>
     </div>
 
-    <!-- Active Card -->
-    <div id="active-card" class="card" style="display: {{isActiveDisplay}};">
-    <div class="header">
+    <div id="active-card" class="card">
+      <div class="header">
         <div>
-        <span class="badge">VAuLT Quest Assignment</span>
-        <h1>{{questName}}</h1>
+          <span class="badge">VAuLT Experience</span>
+          <h1>{{questName}}</h1>
         </div>
         {{roleBadge}}
-    </div>
+      </div>
 
-    <p class="desc">{{questDescription}}</p>
+      <p class="desc">{{questDescription}}</p>
 
-    <div class="qr-box">
+      <div class="qr-box">
         <h3>Play on Mobile</h3>
-        <p>Scan this QR code using the <strong>VAuLT iOS App</strong> (or your iPhone Camera) to start this quest:</p>
+        <p>Scan this QR code with the <strong>VAuLT iOS app</strong> (or your iPhone camera) to start. You will not need to log in.</p>
 
         <div class="qr-frame">
-        <img src="{{qrCodeDataUrl}}" alt="Quest QR Code">
+          <img src="{{qrCodeDataUrl}}" alt="Experience QR code">
         </div>
 
         <div>
-        <a class="mobile-btn" href="{{mobileDeepLink}}">Open directly in VAuLT App</a>
+          <a class="mobile-btn" href="{{appLink}}">Open directly in VAuLT App</a>
         </div>
-    </div>
+        <p class="note">This code works once and expires in {{codeTtlMinutes}} minutes. Reload this page for a new one, including to play again.</p>
+      </div>
 
-    <div class="status-bar">
+      <div class="status-bar">
         <span class="pulse-dot"></span>
-        <span>Waiting for completion on mobile... this screen will automatically update.</span>
+        <span>Finished attempts appear here automatically.</span>
+      </div>
+      {{rosterSection}}
     </div>
-    </div>
 
-</div>
+  </div>
 
-<script>
-    (function () {
-    var checkUrl = "{{statusCheckUrl}}";
-    var pollInterval = 3000;
+  <script>
+    (function() {
+      var checkUrl = "{{statusCheckUrl}}";
+      var lastFinished = {{lastFinishedNumber}};
+      var pollInterval = 5000;
 
-    function pollStatus() {
-        fetch(checkUrl)
-        .then(function (res) {
-            return res.json();
-        })
-        .then(function (data) {
-            if (data && data.completed) {
-            document.getElementById("active-card").style.display = "none";
-            document.getElementById("completion-banner").style.display = "block";
-            return; // Stop polling
+      function show(text) {
+        document.getElementById("attempt-text").textContent = text;
+        document.getElementById("attempt-banner").style.display = "block";
+      }
+
+      function pollStatus() {
+        fetch(checkUrl, { cache: "no-store" })
+          .then(function(res) { return res.json(); })
+          .then(function(data) {
+            var latest = data && data.latest;
+            if (latest && latest.status === "finished" && latest.number > lastFinished) {
+              lastFinished = latest.number;
+              show("Attempt " + latest.number + " finished." + (data.latestSentToCanvas ? " Your result was sent to Canvas." : " Sending your result to Canvas..."));
+            } else if (latest && latest.status === "finished" && data.latestSentToCanvas) {
+              show("Attempt " + latest.number + " finished. Your result was sent to Canvas.");
             }
-            setTimeout(pollStatus, pollInterval);
-        })
-        .catch(function () {
-            setTimeout(pollStatus, pollInterval);
-        });
-    }
+          })
+          .catch(function() {})
+          .then(function() { setTimeout(pollStatus, pollInterval); });
+      }
+      setTimeout(pollStatus, pollInterval);
 
-    if ("{{isCompleted}}" !== "true") {
-        setTimeout(pollStatus, pollInterval);
-    }
+      var rosterBtn = document.getElementById("roster-btn");
+      if (rosterBtn) {
+        rosterBtn.addEventListener("click", function() {
+          rosterBtn.disabled = true;
+          fetch(rosterBtn.getAttribute("data-url"), { cache: "no-store" })
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+              var out = document.getElementById("roster-out");
+              if (!data || !data.members) { out.textContent = (data && data.error) || "Roster unavailable."; return; }
+              var table = document.createElement("table");
+              var head = table.insertRow();
+              ["Canvas user id", "Role", "VAuLT account"].forEach(function(h) { var th = document.createElement("th"); th.textContent = h; head.appendChild(th); });
+              data.members.forEach(function(m) {
+                var row = table.insertRow();
+                [m.userId, m.role, m.viiUsername].forEach(function(v) { row.insertCell().textContent = v; });
+              });
+              out.textContent = data.members.length + " members (fetched live from Canvas, not stored).";
+              out.appendChild(table);
+            })
+            .catch(function() { document.getElementById("roster-out").textContent = "Roster unavailable."; })
+            .then(function() { rosterBtn.disabled = false; });
+        });
+      }
     })();
-</script>
+  </script>
 </body>
 </html>

@@ -4,6 +4,10 @@ require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 const clean = (v) => String(v === undefined || v === null ? '' : v).trim();
 const stripSlash = (u) => clean(u).replace(/\/+$/, '');
 const list = (v) => clean(v).split(/[\s,]+/).filter(Boolean);
+const int = (v, fallback) => {
+  const n = parseInt(v, 10);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+};
 
 const port = parseInt(process.env.PORT, 10) || 3000;
 
@@ -13,16 +17,19 @@ module.exports = {
   gatewayPublicUrl: stripSlash(process.env.GATEWAY_PUBLIC_URL || `http://localhost:${port}`),
   defaultQuestId: parseInt(process.env.DEFAULT_QUEST_ID, 10) || 1,
 
-  // Durable storage (sessions, quest bindings, login state, tool key pair)
+  // Durable storage: experience mappings, short-lived launch sessions, login state, tool key pair.
+  // Nothing in it is a name, email, title or score (see the privacy rules in the README).
   dataDir: path.resolve(process.env.DATA_DIR || path.join(__dirname, '../data')),
-  sessionTtlMs: (parseInt(process.env.SESSION_TTL_HOURS, 10) || 168) * 60 * 60 * 1000,
-  loginStateTtlMs: (parseInt(process.env.LOGIN_STATE_TTL_SEC, 10) || 600) * 1000,
+  sessionTtlMs: int(process.env.SESSION_TTL_HOURS, 24) * 60 * 60 * 1000,
+  loginStateTtlMs: int(process.env.LOGIN_STATE_TTL_SEC, 600) * 1000,
+  launchCodeTtlMs: int(process.env.LAUNCH_CODE_TTL_SEC, 600) * 1000,
+  deepLinkTtlMs: int(process.env.DEEP_LINK_TTL_SEC, 600) * 1000,
 
   // LTI 1.3 platform (Canvas) registration. No shared secret exists in LTI 1.3.
   lti: {
     issuer: stripSlash(process.env.LTI_ISSUER),
     clientId: clean(process.env.LTI_CLIENT_ID),
-    deploymentId: clean(process.env.LTI_DEPLOYMENT_ID), // optional but recommended
+    deploymentId: clean(process.env.LTI_DEPLOYMENT_ID), // required: part of the experience mapping key
     authLoginUrl: clean(process.env.LTI_AUTH_LOGIN_URL),
     authTokenUrl: clean(process.env.LTI_AUTH_TOKEN_URL),
     tokenAudience: clean(process.env.LTI_TOKEN_AUDIENCE), // defaults to authTokenUrl

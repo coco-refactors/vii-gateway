@@ -13,6 +13,7 @@ const CLAIM = {
   custom: 'https://purl.imsglobal.org/spec/lti/claim/custom',
   lti11Legacy: 'https://purl.imsglobal.org/spec/lti/claim/lti1p1',
   ags: 'https://purl.imsglobal.org/spec/lti-ags/claim/endpoint',
+  nrps: 'https://purl.imsglobal.org/spec/lti-nrps/claim/namesroleservice',
 };
 
 /**
@@ -147,46 +148,31 @@ function classifyRole(roles) {
 }
 
 /**
- * Canvas user identity from a verified launch. `sub` is the stable Canvas user id for this platform.
- * Canvas can also send the LTI 1.1 user id (lti1p1 claim) for tools migrated from 1.1; when present
- * it is used as the VAuLT account key so existing `canvas_<id>` accounts keep working.
+ * Canvas user identity from a verified launch: only the opaque, stable Canvas user id (`sub`), plus the
+ * LTI 1.1 user id when Canvas sends the lti1p1 claim (keeps existing `canvas_<id>` Vii accounts).
+ * Names, emails, course and assignment titles are deliberately NOT read (student data rule); with the
+ * tool's privacy level set to anonymous Canvas does not send them anyway.
  */
 function extractIdentity(payload) {
   const legacy = payload[CLAIM.lti11Legacy];
   return {
     sub: String(payload.sub),
     legacyUserId: legacy && legacy.user_id ? String(legacy.user_id) : null,
-    name: payload.name || [payload.given_name, payload.family_name].filter(Boolean).join(' ') || '',
-    email: payload.email || '',
   };
 }
 
-/**
- * Validate the LTI-specific claims of a signature-verified id_token and normalise them.
- */
-function parseLaunch(payload, platform) {
-  const messageType = payload[CLAIM.messageType];
-  if (messageType !== 'LtiResourceLinkRequest') {
-    throw new LtiError('MESSAGE_TYPE_UNSUPPORTED', 'This launch type is not supported by VAuLT.', {
-      status: 400,
-      detail: `message_type=${messageType}`,
-    });
-  }
+/** Checks shared by every message type: version, deployment, role. */
+function parseCommon(payload, platform) {
   if (payload[CLAIM.version] !== '1.3.0') {
     throw new LtiError('VERSION_UNSUPPORTED', 'Only LTI 1.3 launches are supported.', { status: 400 });
   }
 
   const deploymentId = payload[CLAIM.deploymentId];
-  if (!deploymentId || (platform.deploymentId && deploymentId !== platform.deploymentId)) {
+  if (!deploymentId || deploymentId !== platform.deploymentId) {
     throw new LtiError('DEPLOYMENT_INVALID', 'This tool is not deployed for the launching account.', {
       status: 401,
-      detail: `deployment_id=${deploymentId}`,
+      detail: 'deployment_id does not match the registration',
     });
-  }
-
-  const resourceLink = payload[CLAIM.resourceLink] || {};
-  if (!resourceLink.id) {
-    throw new LtiError('RESOURCE_LINK_MISSING', 'The launch did not identify an assignment.', { status: 400 });
   }
 
   const roles = Array.isArray(payload[CLAIM.roles]) ? payload[CLAIM.roles] : [];
@@ -194,29 +180,42 @@ function parseLaunch(payload, platform) {
   if (!role) {
     throw new LtiError('ROLE_UNSUPPORTED', 'Your Canvas role cannot open this activity.', {
       status: 403,
-      detail: `roles=${roles.join(',')}`,
+      detail: `${roles.length} role(s), none supported`,
     });
   }
+  return { ...extractIdentity(payload), role, isInstructor: role === 'instructor', deploymentId: String(deploymentId) };
+}
 
-  const identity = extractIdentity(payload);
-  const context = payload[CLAIM.context] || {};
+/**
+ * Validate the LTI-specific claims of a signature-verified id_token and normalise them.
+ * Accepts a resource-link launch.
+ */
+function parseLaunch(payload, platform) {
+  const messageType = payload[CLAIM.messageType];
+  if (messageType !== 'LtiResourceLinkRequest') {
+    throw new LtiError('MESSAGE_TYPE_UNSUPPORTED', 'This launch type is not supported by VAuLT.', {
+      status: 400,
+      detail: `message_type=${String(messageType).slice(0, 60)}`,
+    });
+  }
+  const common = parseCommon(payload, platform);
+
+  const resourceLink = payload[CLAIM.resourceLink] || {};
+  if (!resourceLink.id) {
+    throw new LtiError('RESOURCE_LINK_MISSING', 'The launch did not identify an assignment.', { status: 400 });
+  }
+
   const custom = payload[CLAIM.custom] || {};
   const agsClaim = payload[CLAIM.ags];
+  const nrpsClaim = payload[CLAIM.nrps];
 
   return {
-    ...identity,
-    role,
-    isInstructor: role === 'instructor',
-    roles,
-    deploymentId,
+    ...common,
+    messageType,
     resourceLinkId: String(resourceLink.id),
-    assignmentTitle: resourceLink.title || 'VAuLT Assignment',
-    courseTitle: context.title || 'Canvas Course',
     customQuestId: parseInt(custom.quest_id, 10) || null,
-    ags:
-      agsClaim && agsClaim.lineitem
-        ? { lineitem: agsClaim.lineitem, lineitems: agsClaim.lineitems || null, scopes: agsClaim.scope || [] }
-        : null,
+    ags: agsClaim && agsClaim.lineitem ? { lineitem: agsClaim.lineitem, scopes: agsClaim.scope || [] } : null,
+    nrpsUrl: nrpsClaim && nrpsClaim.context_memberships_url ? String(nrpsClaim.context_memberships_url) : null,
   };
 }
 

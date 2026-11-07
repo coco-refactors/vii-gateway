@@ -1,9 +1,11 @@
 const express = require('express');
+const router = express.Router();
+
 const sessionStore = require('../services/sessionStore');
 const vaultClient = require('../services/vaultClient');
 const { asyncHandler } = require('../utils/html');
 
-const router = express.Router();
+const noStore = (res) => res.set('Cache-Control', 'no-store');
 
 /**
  * Health check endpoint
@@ -18,41 +20,43 @@ router.get('/health', (req, res) => {
 });
 
 /**
- * Polling endpoint called by the Canvas iframe
+ * Polled by the launch page with its status token (not the QR code). No score and no completion data
+ * are stored here any more.
+ * INTERIM: this needs to be replaced with the live attempt state read from Vii (api-status block).
  */
 router.get('/status/:token', (req, res) => {
-  const { token } = req.params;
-  const session = sessionStore.getSession(token);
-
-  if (!session) {
-    return res.status(404).json({ error: 'Session not found' });
+  const session = sessionStore.getByStatusToken(req.params.token);
+  if (!session || !session.questId) {
+    return noStore(res).status(404).json({ error: 'Session not found' });
   }
-
-  res.json({
-    completed: Boolean(session.isCompleted),
-    gradePassedBack: Boolean(session.gradePassedBack),
-    vaultPersisted: Boolean(session.vaultPersisted),
-    score: session.score,
-  });
+  noStore(res).json({ available: false });
 });
 
 /**
- * Returns a fresh VAuLT login for the Canvas session's user.
- * The mobile app supplies the session token after scanning the QR code.
+ * The app exchanges the single-use launch code from the QR code for a Vii login of the Canvas user who
+ * launched (created on first use), the experience id and the launch reference to attach to the attempt.
+ * No separate Vii login for students or instructors. Nothing from Vii's answer is stored here.
  */
 router.post(
-  '/session/:token/vault-login',
+  '/launch/redeem',
   asyncHandler(async (req, res) => {
-    const session = sessionStore.getSession(req.params.token);
-    if (!session) {
-      return res.status(404).json({ error: 'Session not found or expired' });
+    const taken = sessionStore.takeLaunchCode((req.body || {}).code);
+    if (!taken) {
+      return noStore(res).status(410).json({ error: 'This QR code has expired or was already used. Reload the page in Canvas for a new one.' });
     }
-    const vaultAuth = await vaultClient.authenticateUsername(session.vaultUsername);
-    if (!vaultAuth) {
-      return res.status(502).json({ error: 'VAuLT login is unavailable, try again' });
+    const { session, restore } = taken;
+    const vault = await vaultClient.authenticateUsername(session.vaultUsername, { timeout: 8000 });
+    if (!vault) {
+      restore(); // not the student's fault: the same QR code can be scanned again
+      return noStore(res).status(502).json({ error: 'VAuLT login is unavailable, try again in a moment.' });
     }
-    sessionStore.updateSession(session.token, { vaultProvisioned: true });
-    res.json({ username: session.vaultUsername, role: session.role, vault: vaultAuth });
+    noStore(res).json({
+      launchRef: session.id,
+      questId: session.questId,
+      role: session.role,
+      username: session.vaultUsername,
+      vault,
+    });
   })
 );
 

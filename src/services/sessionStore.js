@@ -1,130 +1,126 @@
 const crypto = require('crypto');
 const config = require('../config');
 const storage = require('./storage');
+const { mappingKey } = require('./platformRegistry');
 
-const SESSIONS = 'sessions';
-const RESOURCE_LINKS = 'resourceLinks'; // `${platformKey}::${resourceLinkId}` -> questId
+const SESSIONS = 'sessions'; // launchRef -> session
+const STATUS_TOKENS = 'statusTokens'; // statusToken -> launchRef (the launch page's polling credential)
+const LAUNCH_CODES = 'launchCodes'; // code -> { launchRef, expiresAt } (single use, in the QR code)
+const RESOURCE_LINKS = 'resourceLinks'; // issuer|deployment::resourceLink -> questId (durable)
 
-const linkKey = (platformKey, resourceLinkId) => `${platformKey}::${resourceLinkId}`;
 const clone = (obj) => (obj ? JSON.parse(JSON.stringify(obj)) : null);
+const random = (bytes) => crypto.randomBytes(bytes).toString('base64url');
 
 class SessionStore {
   /**
-   * Create and persist a new launch session (student or instructor).
+   * Create a short-lived launch session. It holds only what grade passback and the roster need:
+   * opaque Canvas user id (sub), role, the experience, the Vii username derived from sub, the AGS line
+   * item and NRPS URL from the launch, and the ids of attempts already sent to Canvas.
+   * No names, emails, course or assignment titles, scores or completion flags.
    */
-  createSession({
-    questId,
-    platformKey,
-    issuer,
-    clientId,
-    deploymentId,
-    sub,
-    role, // 'student' | 'instructor'
-    studentName,
-    studentEmail,
-    courseTitle,
-    resourceLinkId,
-    assignmentTitle,
-    ags, // { lineitem, lineitems, scopes } | null
-    vaultUsername,
-    vaultProvisioned,
-  }) {
-    const token = crypto.randomBytes(24).toString('hex');
+  createSession({ questId, issuer, clientId, deploymentId, resourceLinkId, sub, role, vaultUsername, ags, nrpsUrl }) {
     const now = Date.now();
     const session = {
-      id: crypto.randomUUID(),
-      token,
+      id: random(24), // the launch reference Vii stores with the attempt (URL-safe, 32 chars)
+      statusToken: random(24),
       questId: questId ? parseInt(questId, 10) : null,
-      platformKey,
       issuer,
       clientId,
-      deploymentId: deploymentId || null,
+      deploymentId,
+      resourceLinkId: resourceLinkId ? String(resourceLinkId) : null,
       sub: String(sub),
-      canvasUserId: String(sub),
-      role,
-      studentName: studentName || 'Student',
-      studentEmail: studentEmail || '',
-      courseTitle: courseTitle || 'Canvas Course',
-      resourceLinkId: String(resourceLinkId),
-      assignmentTitle: assignmentTitle || 'Quest Assignment',
-      ags: ags || null,
+      role, // 'student' | 'instructor'
       vaultUsername: vaultUsername || null,
-      vaultProvisioned: Boolean(vaultProvisioned),
-      isCompleted: false,
-      vaultPersisted: false,
-      gradePassedBack: false,
-      score: null,
-      createdAt: new Date(now).toISOString(),
+      ags: ags ? { lineitem: ags.lineitem, scopes: ags.scopes || [] } : null,
+      nrpsUrl: nrpsUrl || null,
+      sentAttemptIds: [],
+      createdAt: now,
       expiresAt: now + config.sessionTtlMs,
-      completedAt: null,
     };
-
-    storage.set(SESSIONS, token, session);
+    storage.set(SESSIONS, session.id, session);
+    storage.set(STATUS_TOKENS, session.statusToken, session.id);
     return clone(session);
   }
 
-  /** Look up a session by token (returns a copy; use updateSession to change it). */
-  getSession(token) {
-    if (!token || typeof token !== 'string') return null;
-    const session = storage.get(SESSIONS, token);
+  /** Session by launch reference (returns a copy). Expired sessions are deleted on sight. */
+  getSession(launchRef) {
+    if (!launchRef || typeof launchRef !== 'string' || launchRef.length > 64) return null;
+    const session = storage.get(SESSIONS, launchRef);
     if (!session) return null;
-    if (session.expiresAt && session.expiresAt < Date.now()) {
-      storage.delete(SESSIONS, token);
+    if (session.expiresAt < Date.now()) {
+      this.deleteSession(session.id);
       return null;
     }
     return clone(session);
   }
 
-  /** Merge `patch` into a stored session and persist. */
-  updateSession(token, patch) {
-    const session = storage.get(SESSIONS, token);
+  getByStatusToken(token) {
+    if (!token || typeof token !== 'string' || token.length > 64) return null;
+    const launchRef = storage.get(STATUS_TOKENS, token);
+    return launchRef ? this.getSession(launchRef) : null;
+  }
+
+  updateSession(launchRef, patch) {
+    const session = storage.get(SESSIONS, launchRef);
     if (!session) return null;
     const updated = { ...session, ...patch };
-    storage.set(SESSIONS, token, updated);
+    storage.set(SESSIONS, launchRef, updated);
     return clone(updated);
   }
 
-  /** Mark a session completed (idempotent: a completed session keeps its original score). */
-  completeSession(token, score = 1.0, extra = {}) {
-    const session = storage.get(SESSIONS, token);
+  /** Remember that this Vii attempt reached Canvas (id only), so a resend is not posted twice. */
+  markAttemptSent(launchRef, attemptId) {
+    const session = storage.get(SESSIONS, launchRef);
     if (!session) return null;
-    if (session.isCompleted) return clone(session);
-    return this.updateSession(token, {
-      isCompleted: true,
-      score: parseFloat(score),
-      completedAt: new Date().toISOString(),
-      ...extra,
-    });
+    const ids = new Set(session.sentAttemptIds || []);
+    ids.add(Number(attemptId));
+    return this.updateSession(launchRef, { sentAttemptIds: [...ids] });
   }
 
-  /** Newest session for this user + assignment (used to show "completed" on relaunch). */
-  findLatestSession({ platformKey, resourceLinkId, sub, role }) {
-    const matches = storage
-      .values(SESSIONS)
-      .filter(
-        (s) =>
-          s.platformKey === platformKey &&
-          s.resourceLinkId === String(resourceLinkId) &&
-          s.sub === String(sub) &&
-          s.role === role &&
-          (!s.expiresAt || s.expiresAt >= Date.now())
-      )
-      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
-    return clone(matches[0]);
+  deleteSession(launchRef) {
+    const session = storage.get(SESSIONS, launchRef);
+    if (session) storage.delete(STATUS_TOKENS, session.statusToken);
+    storage.delete(SESSIONS, launchRef);
   }
 
-  /** Assigned quest ID for a Canvas assignment (resource link), scoped to the platform. */
-  getQuestForResource(platformKey, resourceLinkId) {
-    return storage.get(RESOURCE_LINKS, linkKey(platformKey, resourceLinkId)) || null;
+  /** New single-use launch code for the QR code (expires after LAUNCH_CODE_TTL_SEC, default 10 minutes). */
+  createLaunchCode(launchRef) {
+    const code = random(24);
+    storage.set(LAUNCH_CODES, code, { launchRef, expiresAt: Date.now() + config.launchCodeTtlMs });
+    return code;
   }
 
-  /** Bind a quest ID to a Canvas assignment (survives restarts). */
-  bindQuestToResource(platformKey, resourceLinkId, questId) {
-    storage.set(RESOURCE_LINKS, linkKey(platformKey, resourceLinkId), parseInt(questId, 10));
+  /**
+   * Take a launch code out of the store. Returns { session, restore } or null. The code is deleted
+   * immediately (single use); call restore() if the exchange fails afterwards for a reason that is
+   * not the student's fault (Vii unreachable), so the same QR code can be scanned again.
+   */
+  takeLaunchCode(code) {
+    if (!code || typeof code !== 'string' || !/^[A-Za-z0-9_-]{16,128}$/.test(code)) return null;
+    const record = storage.get(LAUNCH_CODES, code);
+    if (!record) return null;
+    storage.delete(LAUNCH_CODES, code);
+    if (record.expiresAt < Date.now()) return null;
+    const session = this.getSession(record.launchRef);
+    if (!session) return null;
+    return { session, restore: () => storage.set(LAUNCH_CODES, code, record) };
+  }
+
+  /** Experience assigned to a Canvas resource link, keyed by issuer + deployment id + resource link id. */
+  getQuestForResource(issuer, deploymentId, resourceLinkId) {
+    return storage.get(RESOURCE_LINKS, mappingKey(issuer, deploymentId, resourceLinkId)) || null;
+  }
+
+  bindQuestToResource(issuer, deploymentId, resourceLinkId, questId) {
+    storage.set(RESOURCE_LINKS, mappingKey(issuer, deploymentId, resourceLinkId), parseInt(questId, 10));
   }
 
   pruneExpired() {
-    return storage.prune(SESSIONS, (s) => s.expiresAt && s.expiresAt < Date.now());
+    const now = Date.now();
+    const expired = storage.values(SESSIONS).filter((s) => s.expiresAt < now);
+    expired.forEach((s) => this.deleteSession(s.id));
+    const codes = storage.prune(LAUNCH_CODES, (r) => r.expiresAt < now);
+    return expired.length + codes;
   }
 }
 

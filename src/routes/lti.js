@@ -10,9 +10,10 @@ const vaultClient = require('../services/vaultClient');
 const ltiState = require('../services/ltiState');
 const ltiValidator = require('../services/ltiValidator');
 const keyStore = require('../services/keyStore');
-const { findPlatform, platformKey } = require('../services/platformRegistry');
+const { findPlatform } = require('../services/platformRegistry');
 const { LtiError, renderLtiError } = require('../services/ltiErrors');
 const { escapeHtml, fillTemplate, asyncHandler } = require('../utils/html');
+const { safeDetail } = require('../utils/redact');
 
 const launchTemplate = fs.readFileSync(
   path.join(__dirname, '../views/launch.html'),
@@ -61,7 +62,7 @@ router.get('/config.json', (req, res) => {
         domain: new URL(base).host,
         tool_id: 'vault-quest',
         platform: 'canvas.instructure.com',
-        privacy_level: 'public',
+        privacy_level: 'anonymous', // Canvas sends no names or emails (student data rule)
         settings: {
           text: 'VAuLT Quest',
           placements: [
@@ -101,13 +102,13 @@ const loginInitiation = asyncHandler(async (req, res) => {
   if (!platform) {
     throw new LtiError('PLATFORM_UNKNOWN', 'This Canvas account is not registered with VAuLT.', {
       status: 400,
-      detail: `Unregistered issuer/client_id: ${iss} / ${clientId}`,
+      detail: 'unregistered issuer/client_id',
     });
   }
-  if (deploymentId && platform.deploymentId && String(deploymentId) !== platform.deploymentId) {
+  if (deploymentId && String(deploymentId) !== platform.deploymentId) {
     throw new LtiError('DEPLOYMENT_INVALID', 'This tool is not deployed for the launching account.', {
       status: 401,
-      detail: `lti_deployment_id=${deploymentId}`,
+      detail: 'lti_deployment_id does not match the registration',
     });
   }
 
@@ -115,7 +116,7 @@ const loginInitiation = asyncHandler(async (req, res) => {
   if (new URL(String(targetLinkUri), config.gatewayPublicUrl).origin !== new URL(config.gatewayPublicUrl).origin) {
     throw new LtiError('TARGET_LINK_INVALID', 'The launch target is not this tool.', {
       status: 400,
-      detail: `target_link_uri=${targetLinkUri}`,
+      detail: 'target_link_uri is not this gateway',
     });
   }
 
@@ -145,36 +146,42 @@ router.get('/login', loginInitiation);
 router.post('/login', loginInitiation);
 
 /**
- * Build the launch page (QR code + live status) for a session.
+ * Build the launch page for a session. The QR code holds an https link with a fresh single-use launch
+ * code and the experience id; the app exchanges the code at /api/launch/redeem (no Vii login screen).
+ * The latest attempt comes live from Vii; a finished experience can always be started again.
  */
-async function renderLaunchPage(session) {
-  const mobileDeepLink = `vault://quest/${session.questId}?token=${session.token}&gateway=${encodeURIComponent(
-    config.gatewayPublicUrl
-  )}`;
+async function renderLaunchPage(session, experience, attemptState) {
+  const code = sessionStore.createLaunchCode(session.id);
+  const launchLink = `${config.gatewayPublicUrl}/launch/m?code=${encodeURIComponent(code)}&quest=${session.questId}`;
+  const appLink = `vault://launch?gateway=${encodeURIComponent(config.gatewayPublicUrl)}&code=${encodeURIComponent(code)}&quest=${session.questId}`;
 
   let qrCodeDataUrl = '';
   try {
-    qrCodeDataUrl = await QRCode.toDataURL(mobileDeepLink, {
-      width: 220,
-      margin: 1,
-      color: { dark: '#0f172a', light: '#ffffff' },
-    });
+    qrCodeDataUrl = await QRCode.toDataURL(launchLink, { width: 220, margin: 1, color: { dark: '#0f172a', light: '#ffffff' } });
   } catch (err) {
-    console.error(`[LTI Gateway] QR Code generation error: ${err.message}`);
+    console.error(`[LTI Gateway] QR code generation error: ${safeDetail(err.message)}`);
   }
 
-  const questDetails = await vaultClient.getQuestDetails(session.questId);
+  const latest = attemptState && attemptState.latest;
+  const finished = latest && latest.status === 'finished';
+  const sent = finished && session.sentAttemptIds.includes(Number(latest.id));
+  const rosterSection =
+    session.role === 'instructor' && session.nrpsUrl
+      ? `<div class="roster"><button id="roster-btn" class="secondary-btn" data-url="/api/roster/${escapeHtml(session.statusToken)}">Show course roster</button><div id="roster-out" class="note"></div></div>`
+      : '';
 
   return fillTemplate(launchTemplate, {
-    questName: escapeHtml(questDetails.name),
-    questDescription: escapeHtml(questDetails.description),
+    questName: escapeHtml(experience.name),
+    questDescription: escapeHtml(experience.description),
     qrCodeDataUrl: escapeHtml(qrCodeDataUrl),
-    mobileDeepLink: escapeHtml(mobileDeepLink),
-    statusCheckUrl: `/api/status/${session.token}`,
-    isCompleted: String(session.isCompleted),
-    isCompletedDisplay: session.isCompleted ? 'block' : 'none',
-    isActiveDisplay: session.isCompleted ? 'none' : 'block',
+    appLink: escapeHtml(appLink),
+    codeTtlMinutes: String(Math.round(config.launchCodeTtlMs / 60000)),
+    statusCheckUrl: `/api/status/${session.statusToken}`,
+    attemptDisplay: finished ? 'block' : 'none',
+    attemptText: finished ? escapeHtml(`Attempt ${latest.number} finished.${sent ? ' Your result was sent to Canvas.' : ''} You can play again.`) : '',
+    lastFinishedNumber: String(finished ? Number(latest.number) || 0 : 0),
     roleBadge: session.role === 'instructor' ? '<span class="role-badge">Instructor Preview</span>' : '',
+    rosterSection,
   });
 }
 
@@ -182,7 +189,7 @@ async function renderLaunchPage(session) {
  * Builds the instructor quest picker.
  * Each form includes the instructor's session token to authorize the selection.
  */
-function renderQuestSelector(session) {
+function renderQuestSelector(session) { // INTERIM: replaced by the Vii-backed picker
   const listHtml = vaultClient
     .getQuestCatalog()
     .map(
@@ -193,7 +200,7 @@ function renderQuestSelector(session) {
           <p>${escapeHtml(q.description)}</p>
         </div>
         <form method="POST" action="/lti/select-quest">
-          <input type="hidden" name="token" value="${escapeHtml(session.token)}">
+          <input type="hidden" name="token" value="${escapeHtml(session.statusToken)}">
           <input type="hidden" name="quest_id" value="${q.id}">
           <button type="submit" class="btn">Assign Quest</button>
         </form>
@@ -203,7 +210,7 @@ function renderQuestSelector(session) {
     .join('');
 
   return fillTemplate(selectQuestTemplate, {
-    assignmentTitle: escapeHtml(session.assignmentTitle),
+    assignmentTitle: 'this link', // no assignment titles are read or stored
     questListHtml: listHtml,
   });
 }
@@ -219,7 +226,7 @@ router.post(
     if (body.error) {
       throw new LtiError('PLATFORM_AUTH_ERROR', 'Canvas could not authorize this launch.', {
         status: 401,
-        detail: `${body.error}: ${body.error_description || ''}`,
+        detail: `${String(body.error).slice(0, 60)}`,
       });
     }
 
@@ -235,59 +242,38 @@ router.post(
 
     const launch = ltiValidator.parseLaunch(payload, platform);
 
-    const pKey = platformKey(platform);
-    let questId = launch.customQuestId || sessionStore.getQuestForResource(pKey, launch.resourceLinkId);
-
-    // Request a VAuLT guest login using the verified Canvas identity.
-    // If login fails, continue and record the failure in the session.
-    const vaultKey = launch.legacyUserId || launch.sub;
-    const vaultUsername = vaultClient.usernameFor(vaultKey);
-    const vaultAuth = await vaultClient.authenticateUser(vaultKey, { timeout: 5000 });
-
-    const sessionBase = {
-      platformKey: pKey,
+    const sessionFields = {
       issuer: platform.issuer,
       clientId: platform.clientId,
       deploymentId: launch.deploymentId,
+      resourceLinkId: launch.resourceLinkId,
       sub: launch.sub,
       role: launch.role,
-      studentName: launch.name,
-      studentEmail: launch.email,
-      courseTitle: launch.courseTitle,
-      resourceLinkId: launch.resourceLinkId,
-      assignmentTitle: launch.assignmentTitle,
+      vaultUsername: vaultClient.usernameFor(launch.legacyUserId || launch.sub),
       ags: launch.ags,
-      vaultUsername,
-      vaultProvisioned: Boolean(vaultAuth),
+      nrpsUrl: launch.nrpsUrl,
     };
 
-     // Show the quest picker when an instructor launches an unassigned quest.
+    // INTERIM: which experience comes from the link's custom quest_id, else
+    // the experience bound to this link; the Vii lookup, "no experience" handling and attempt state land later.
+    let questId =
+      launch.customQuestId ||
+      sessionStore.getQuestForResource(platform.issuer, launch.deploymentId, launch.resourceLinkId);
+
+    // Show the quest picker when an instructor launches an unassigned quest.
     if (!questId && launch.isInstructor) {
-      const instructorSession = sessionStore.createSession({
-        ...sessionBase,
-        questId: null,
-      });
+      const instructorSession = sessionStore.createSession({ ...sessionFields, questId: null });
       return noStore(res).send(renderQuestSelector(instructorSession));
     }
 
-    // Default to the configured quest if still not assigned (students opening an unconfigured assignment)
+    // Still unassigned (students): default quest until it gets replaced with a clear message.
     if (!questId) {
       questId = config.defaultQuestId;
     }
 
-    // Reuse a completed session for this quest, or create a new session.
-    const previous = sessionStore.findLatestSession({
-      platformKey: pKey,
-      resourceLinkId: launch.resourceLinkId,
-      sub: launch.sub,
-      role: launch.role,
-    });
-    const session =
-      previous && previous.isCompleted && previous.questId === questId
-        ? previous
-        : sessionStore.createSession({ ...sessionBase, questId });
-
-    noStore(res).send(await renderLaunchPage(session));
+    const session = sessionStore.createSession({ ...sessionFields, questId });
+    const experience = await vaultClient.getQuestDetails(questId);
+    noStore(res).send(await renderLaunchPage(session, experience, null));
   })
 );
 
@@ -299,8 +285,8 @@ router.post(
   '/select-quest',
   asyncHandler(async (req, res) => {
     const { token, quest_id: questIdRaw } = req.body || {};
-    const session = sessionStore.getSession(token);
-    if (!session || session.role !== 'instructor') {
+    const session = sessionStore.getByStatusToken(token);
+    if (!session || session.role !== 'instructor' || !session.resourceLinkId) {
       throw new LtiError('FORBIDDEN', 'Only an instructor launched from Canvas can assign a quest.', { status: 403 });
     }
     const quest = vaultClient.findQuest(questIdRaw);
@@ -308,8 +294,8 @@ router.post(
       throw new LtiError('QUEST_INVALID', 'That quest does not exist.', { status: 400 });
     }
 
-    sessionStore.bindQuestToResource(session.platformKey, session.resourceLinkId, quest.id);
-    sessionStore.updateSession(token, { questId: quest.id });
+    sessionStore.bindQuestToResource(session.issuer, session.deploymentId, session.resourceLinkId, quest.id);
+    sessionStore.updateSession(session.id, { questId: quest.id });
 
     noStore(res).send(`
     <div style="font-family: sans-serif; padding: 32px; text-align: center; color: #166534; background: #f0fdf4; border-radius: 12px; margin: 30px auto; max-width: 600px;">
@@ -322,14 +308,15 @@ router.post(
 
 /**
  * Any LtiError (or unexpected failure) inside /lti/* renders a generic, non-leaking error page.
+ * Only the error code and a redacted detail are logged.
  */
 // eslint-disable-next-line no-unused-vars
 router.use((err, req, res, next) => {
   if (err instanceof LtiError) {
-    console.warn(`[LTI Gateway] Launch rejected (${err.code}): ${err.detail || err.publicMessage}`);
+    console.warn(`[LTI Gateway] Launch rejected (${err.code}): ${safeDetail(err.detail || err.publicMessage)}`);
     return renderLtiError(res, err);
   }
-  console.error(`[LTI Gateway] Unexpected error: ${err.stack || err.message}`);
+  console.error(`[LTI Gateway] Unexpected error: ${safeDetail(err.message)}`);
   return renderLtiError(res, new LtiError('SERVER_ERROR', 'Something went wrong on our side.', { status: 500 }));
 });
 

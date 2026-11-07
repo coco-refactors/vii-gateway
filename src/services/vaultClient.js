@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const axios = require('axios');
 const config = require('../config');
+const { hashId, safeDetail } = require('../utils/redact');
 
 // Single quest catalog, hard-coded
 const QUESTS = [
@@ -62,8 +63,9 @@ class VaultClient {
   }
 
   /**
-   * Requests a VAuLT guest login using an existing username.
-   * Returns the login data, or null if authentication fails.
+   * Log in (creating on first use) the Vii account of a Canvas user through the existing
+   * /api/authenticate guest flow. Returns Vii's { user, oauth } or null if Vii refused or is down.
+   * Called when the app exchanges a launch code; nothing from the answer is stored by the gateway.
    */
   async authenticateUsername(username, { timeout } = {}) {
     try {
@@ -81,7 +83,7 @@ class VaultClient {
       }
       return null;
     } catch (err) {
-      console.warn(`[VaultClient] Failed to authenticate user ${username} in VAuLT: ${err.message}`);
+      console.warn(`[VaultClient] Vii login failed for ${hashId(username)}: ${safeDetail(err.message)}`);
       return null;
     }
   }
