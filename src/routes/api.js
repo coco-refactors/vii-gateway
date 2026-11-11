@@ -6,6 +6,8 @@ const vaultClient = require('../services/vaultClient');
 const gradeService = require('../services/gradeService');
 const { verifyHook } = require('../services/hookVerifier');
 const { asyncHandler } = require('../utils/html');
+const nrpsService = require('../services/nrpsService');
+const { hashId } = require('../utils/redact');
 
 const noStore = (res) => res.set('Cache-Control', 'no-store');
 
@@ -125,6 +127,27 @@ router.post(
     } finally {
       inFlight.delete(hook.attempt.id);
     }
+  })
+);
+
+/**
+ * Instructor-only course roster: fetched live from Canvas NRPS and mapped to role and the Vii username
+ * (computed from the Canvas user id). No names or emails, nothing written to disk or logs.
+ */
+router.get(
+  '/roster/:token',
+  asyncHandler(async (req, res) => {
+    const session = sessionStore.getByStatusToken(req.params.token);
+    if (!session || session.role !== 'instructor') {
+      return noStore(res).status(403).json({ error: 'Only an instructor launched from Canvas can see the roster' });
+    }
+    const roster = await nrpsService.fetchRoster(session);
+    if (!roster.ok) return noStore(res).status(roster.status).json({ error: roster.error });
+    console.log(`[NRPS] Roster served to ${hashId(session.sub)} (${roster.members.length} members).`);
+    noStore(res).json({
+      count: roster.members.length,
+      members: roster.members.map((m) => ({ ...m, viiUsername: vaultClient.usernameFor(m.userId) })),
+    });
   })
 );
 
