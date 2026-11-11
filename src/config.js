@@ -47,6 +47,21 @@ module.exports = {
     },
   },
 
+  grades: {
+    // How each attempt's readable work reaches Canvas (decided by the submission spike):
+    //   text    = a new text submission per attempt (Canvas submission extension) - default
+    //   comment = the score's comment only
+    //   none    = score only
+    submissionFormat: ['text', 'comment', 'none'].includes(clean(process.env.SUBMISSION_FORMAT))
+      ? clean(process.env.SUBMISSION_FORMAT)
+      : 'text',
+    // Ask Canvas not to overwrite a grade the instructor set by hand (prioritize_non_tool_grade).
+    preserveInstructorGrade: clean(process.env.PRESERVE_INSTRUCTOR_GRADE) !== 'false',
+    // Points possible of the gradebook column created through Deep Linking.
+    defaultPointsPossible: int(process.env.DEFAULT_POINTS_POSSIBLE, 100),
+    maxSubmissionChars: int(process.env.MAX_SUBMISSION_CHARS, 20000),
+  },
+
   // Who may embed the gateway pages in an iframe (Canvas origins). Space/comma separated.
   frameAncestors: list(process.env.FRAME_ANCESTORS),
   // Browsers never call the gateway cross-origin (the iframe is same-origin); keep CORS closed by default.
