@@ -23,8 +23,15 @@ app.use(securityHeaders);
 app.use(cors({ origin: config.corsOrigins.length ? config.corsOrigins : false }));
 // Parse application/x-www-form-urlencoded (used by Canvas LTI launches)
 app.use(express.urlencoded({ extended: true }));
-// Parse application/json
-app.use(express.json());
+// Parse application/json, keeping the exact bytes for Vii hook signature verification.
+app.use(
+  express.json({
+    limit: '512kb',
+    verify: (req, res, buf) => {
+      req.rawBody = buf;
+    },
+  })
+);
 
 // Routes
 app.use('/lti', ltiRoutes);
