@@ -188,10 +188,11 @@ function parseCommon(payload, platform) {
 
 /**
  * Validate the LTI-specific claims of a signature-verified id_token and normalise them.
- * Accepts a resource-link launch.
+ * Accepts a resource-link launch, and a Deep Linking request from an instructor.
  */
 function parseLaunch(payload, platform) {
   const messageType = payload[CLAIM.messageType];
+  if (messageType === 'LtiDeepLinkingRequest') return parseDeepLinkingRequest(payload, platform);
   if (messageType !== 'LtiResourceLinkRequest') {
     throw new LtiError('MESSAGE_TYPE_UNSUPPORTED', 'This launch type is not supported by VAuLT.', {
       status: 400,
