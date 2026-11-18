@@ -391,6 +391,36 @@ router.post(
 );
 
 /**
+ * Deep Linking: the instructor chose an experience. Build the signed response and auto-post it back to
+ * Canvas, which creates the assignment (and its gradebook column) pointing at the experience.
+ */
+router.post(
+  '/deep-link/select',
+  asyncHandler(async (req, res) => {
+    const { dl, quest_id: questIdRaw } = req.body || {};
+    const experience = await experienceOrFail(questIdRaw);
+    if (!experience) {
+      throw new LtiError('QUEST_INVALID', 'That experience does not exist.', { status: 400 });
+    }
+    const tx = deepLinking.consumeTransaction(dl);
+    if (!tx) {
+      throw new LtiError('DEEP_LINK_EXPIRED', 'This selection expired or was already used. Start again from Canvas.', { status: 403 });
+    }
+    const jwt = await deepLinking.buildResponseJwt(tx, experience);
+    noStore(res).send(`<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><title>Returning to Canvas...</title></head>
+<body style="font-family: sans-serif; padding: 24px;">
+  <p>Returning to Canvas...</p>
+  <form id="dl" method="POST" action="${escapeHtml(tx.returnUrl)}">
+    <input type="hidden" name="JWT" value="${escapeHtml(jwt)}">
+    <noscript><button type="submit">Continue</button></noscript>
+  </form>
+  <script>document.getElementById('dl').submit();</script>
+</body></html>`);
+  })
+);
+
+/**
  * Any LtiError (or unexpected failure) inside /lti/* renders a generic, non-leaking error page.
  * Only the error code and a redacted detail are logged.
  */
