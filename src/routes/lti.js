@@ -38,9 +38,11 @@ router.get(
 );
 
 /**
- * Canvas LTI 1.3 tool configuration (replaces the LTI 1.1 /lti/config.xml).
- * In Canvas: Admin > Developer Keys > + Developer Key > + LTI Key > Method "Enter URL" and use this URL.
- * Every URL is built from GATEWAY_PUBLIC_URL, never from request headers.
+ * Canvas LTI 1.3 tool configuration. In Canvas: Admin > Developer Keys > + Developer Key > + LTI Key >
+ * Method "Enter URL" and use this URL. Every URL is built from GATEWAY_PUBLIC_URL, never from headers.
+ *   - assignment_selection / link_selection: Deep Linking (instructor picks the experience)
+ *   - course_navigation: resource-link launch (instructor binds an experience, students are told to use an assignment)
+ *   - privacy_level anonymous: Canvas sends no names or emails (student data rule)
  */
 router.get('/config.json', (req, res) => {
   const base = config.gatewayPublicUrl;
@@ -56,6 +58,7 @@ router.get('/config.json', (req, res) => {
       'https://purl.imsglobal.org/spec/lti-ags/scope/lineitem.readonly',
       'https://purl.imsglobal.org/spec/lti-ags/scope/result.readonly',
       'https://purl.imsglobal.org/spec/lti-ags/scope/score',
+      'https://purl.imsglobal.org/spec/lti-nrps/scope/contextmembership.readonly',
     ],
     extensions: [
       {
@@ -66,6 +69,20 @@ router.get('/config.json', (req, res) => {
         settings: {
           text: 'VAuLT Quest',
           placements: [
+            {
+              placement: 'assignment_selection',
+              enabled: true,
+              message_type: 'LtiDeepLinkingRequest',
+              target_link_uri: launchUrl,
+              text: 'VAuLT Experience',
+            },
+            {
+              placement: 'link_selection',
+              enabled: true,
+              message_type: 'LtiDeepLinkingRequest',
+              target_link_uri: launchUrl,
+              text: 'VAuLT Experience',
+            },
             {
               placement: 'course_navigation',
               enabled: true,
