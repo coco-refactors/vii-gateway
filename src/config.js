@@ -15,7 +15,6 @@ module.exports = {
   port,
   vaultApiUrl: stripSlash(process.env.VAULT_API_URL || 'http://localhost:80'),
   gatewayPublicUrl: stripSlash(process.env.GATEWAY_PUBLIC_URL || `http://localhost:${port}`),
-  defaultQuestId: int(process.env.DEFAULT_QUEST_ID, 1),
 
   // Durable storage: experience mappings, short-lived launch sessions, login state, tool key pair.
   // Nothing in it is a name, email, title or score (see the privacy rules in the README).
@@ -40,17 +39,12 @@ module.exports = {
     privateKeyPem: clean(process.env.LTI_PRIVATE_KEY).replace(/\\n/g, '\n'),
     clockToleranceSec: parseInt(process.env.LTI_CLOCK_TOLERANCE_SEC, 10) || 10,
     maxTokenAgeSec: parseInt(process.env.LTI_MAX_TOKEN_AGE_SEC, 10) || 300,
-    // Server-to-server configuration for the VAuLT backend.
-    vii: {
-      apiKey: clean(process.env.VII_GATEWAY_KEY || process.env.GATEWAY_API_KEY),
-      hookSecret: clean(process.env.VII_HOOK_SECRET || process.env.GATEWAY_HOOK_SECRET),
-      catalogCacheMs: int(process.env.VII_CATALOG_CACHE_SEC, 60) * 1000,
-    },
   },
 
+  // Vii (VAuLT backend) server-to-server settings. Both values must match the Vii environment.
   vii: {
-    apiKey: clean(process.env.VII_GATEWAY_KEY || process.env.GATEWAY_API_KEY),
-    hookSecret: clean(process.env.VII_HOOK_SECRET || process.env.GATEWAY_HOOK_SECRET),
+    apiKey: clean(process.env.VII_GATEWAY_KEY), // sent as X-Gateway-Key (Vii: GATEWAY_API_KEY)
+    hookSecret: clean(process.env.VII_HOOK_SECRET), // verifies X-Vii-Signature (Vii: GATEWAY_HOOK_SECRET)
     catalogCacheMs: int(process.env.VII_CATALOG_CACHE_SEC, 60) * 1000,
   },
 
