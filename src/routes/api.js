@@ -24,17 +24,32 @@ router.get('/health', (req, res) => {
 });
 
 /**
- * Polled by the launch page with its status token (not the QR code). No score and no completion data
- * are stored here any more.
- * INTERIM: this needs to be replaced with the live attempt state read from Vii (api-status block).
+ * Polled by the launch page with its status token (not the QR code). Reads attempt state from Vii.
  */
-router.get('/status/:token', (req, res) => {
-  const session = sessionStore.getByStatusToken(req.params.token);
-  if (!session || !session.questId) {
-    return noStore(res).status(404).json({ error: 'Session not found' });
-  }
-  noStore(res).json({ available: false });
-});
+router.get(
+  '/status/:token',
+  asyncHandler(async (req, res) => {
+    const session = sessionStore.getByStatusToken(req.params.token);
+    if (!session || !session.questId) {
+      return noStore(res).status(404).json({ error: 'Session not found' });
+    }
+    const attemptState = await vaultClient.getAttemptState(session.vaultUsername, session.questId);
+    const latest = attemptState && attemptState.latest;
+    const finished = Boolean(latest && latest.status === 'finished');
+    const sent = finished && Array.isArray(session.sentAttemptIds) && session.sentAttemptIds.includes(Number(latest.id));
+
+    noStore(res).json({
+      available: true,
+      attempts: attemptState ? attemptState.attempts : 0,
+      latest: latest || null,
+      finished,
+      sent,
+      latestSentToCanvas: sent,
+      attemptText: finished ? `Attempt ${latest.number} finished.${sent ? ' Your result was sent to Canvas.' : ''} You can play again.` : '',
+      lastFinishedNumber: finished ? Number(latest.number) || 0 : 0,
+    });
+  })
+);
 
 /**
  * The app exchanges the single-use launch code from the QR code for a Vii login of the Canvas user who
@@ -87,7 +102,7 @@ const inFlight = new Set(); // Tracks attempts being submitted so overlapping re
  * The gateway does not store scores when Canvas is unavailable.
  */
 router.post(
-  '/hooks/vii/attempt',
+  ['/hooks/vii/attempt', '/hooks/vii', '/hooks/attempts'],
   asyncHandler(async (req, res) => {
     const check = verifyHook(req.rawBody, req.get('x-vii-timestamp'), req.get('x-vii-signature'));
     if (!check.ok) return res.status(check.status).json({ error: check.error });

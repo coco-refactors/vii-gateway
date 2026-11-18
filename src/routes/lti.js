@@ -273,7 +273,8 @@ router.post(
 
     const session = sessionStore.createSession({ ...sessionFields, questId });
     const experience = await vaultClient.getQuestDetails(questId);
-    noStore(res).send(await renderLaunchPage(session, experience, null));
+    const attemptState = await vaultClient.getAttemptState(session.vaultUsername, questId);
+    noStore(res).send(await renderLaunchPage(session, experience, attemptState));
   })
 );
 

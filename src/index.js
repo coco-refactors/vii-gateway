@@ -38,6 +38,12 @@ app.use('/lti', ltiRoutes);
 app.use('/api', apiRoutes);
 app.use('/launch', mobileRoutes);
 
+// Compatibility aliases for attempt hooks without /api prefix (e.g. GATEWAY_HOOK_URL="https://gateway.example/hooks/vii")
+app.use(['/hooks/vii/attempt', '/hooks/vii', '/hooks/attempts'], (req, res, next) => {
+  req.url = '/hooks/vii/attempt';
+  apiRoutes(req, res, next);
+});
+
 // Last-resort handlers: unknown routes and unexpected errors (JSON for non-LTI routes).
 app.use((req, res) => res.status(404).json({ error: 'Not found' }));
 // eslint-disable-next-line no-unused-vars
