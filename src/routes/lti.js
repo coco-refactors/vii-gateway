@@ -10,6 +10,7 @@ const vaultClient = require('../services/vaultClient');
 const ltiState = require('../services/ltiState');
 const ltiValidator = require('../services/ltiValidator');
 const keyStore = require('../services/keyStore');
+const deepLinking = require('../services/deepLinking');
 const { findPlatform } = require('../services/platformRegistry');
 const { LtiError, renderLtiError } = require('../services/ltiErrors');
 const { escapeHtml, fillTemplate, asyncHandler } = require('../utils/html');
@@ -258,6 +259,18 @@ router.post(
     ltiState.validateNonce(payload.nonce, tx);
 
     const launch = ltiValidator.parseLaunch(payload, platform);
+
+    // Deep Linking request: keep the return URL on the server and show the experience picker.
+    if (launch.messageType === 'LtiDeepLinkingRequest') {
+      const txId = deepLinking.createTransaction({
+        issuer: platform.issuer,
+        clientId: platform.clientId,
+        deploymentId: launch.deploymentId,
+        returnUrl: launch.deepLinking.returnUrl,
+        data: launch.deepLinking.data,
+      });
+      return noStore(res).send(renderDeepLinkPicker(txId, await experiencesOrFail()));
+    }
 
     const sessionFields = {
       issuer: platform.issuer,

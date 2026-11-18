@@ -6,6 +6,7 @@ const { escapeHtml } = require('./utils/html');
 const { listPlatforms } = require('./services/platformRegistry');
 const sessionStore = require('./services/sessionStore');
 const ltiState = require('./services/ltiState');
+const deepLinking = require('./services/deepLinking');
 
 const ltiRoutes = require('./routes/lti');
 const apiRoutes = require('./routes/api');
@@ -54,13 +55,14 @@ app.use((err, req, res, next) => {
 
 // Start server
 app.listen(config.port, () => {
-    // Housekeeping: drop expired sessions / login states now and hourly
+    // Housekeeping: drop expired sessions, launch codes, login states and Deep Linking selections
     const prune = () => {
         sessionStore.pruneExpired();
         ltiState.pruneExpiredStates();
+        deepLinking.pruneExpired();
     };
     prune();
-    setInterval(prune, 60 * 60 * 1000).unref();
+    setInterval(prune, 10 * 60 * 1000).unref();
 
     
     console.log(`====================================================`);
