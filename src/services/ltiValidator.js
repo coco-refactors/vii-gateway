@@ -14,6 +14,7 @@ const CLAIM = {
   lti11Legacy: 'https://purl.imsglobal.org/spec/lti/claim/lti1p1',
   ags: 'https://purl.imsglobal.org/spec/lti-ags/claim/endpoint',
   nrps: 'https://purl.imsglobal.org/spec/lti-nrps/claim/namesroleservice',
+  deepLinking: 'https://purl.imsglobal.org/spec/lti-dl/claim/deep_linking_settings',
 };
 
 /**
@@ -184,6 +185,35 @@ function parseCommon(payload, platform) {
     });
   }
   return { ...extractIdentity(payload), role, isInstructor: role === 'instructor', deploymentId: String(deploymentId) };
+}
+
+/**
+ * Deep Linking request ("add external tool" when creating an assignment): instructors only, and the
+ * platform must accept an LTI resource link back. The return URL and opaque `data` are kept for the
+ * response; nothing else.
+ */
+function parseDeepLinkingRequest(payload, platform) {
+  const common = parseCommon(payload, platform);
+  if (!common.isInstructor) {
+    throw new LtiError('FORBIDDEN', 'Only an instructor can add a VAuLT experience to a course.', { status: 403 });
+  }
+  const settings = payload[CLAIM.deepLinking] || {};
+  const returnUrl = settings.deep_link_return_url;
+  if (!returnUrl || !/^https?:\/\//.test(String(returnUrl))) {
+    throw new LtiError('DEEP_LINK_INVALID', 'The Deep Linking request has no return address.', { status: 400 });
+  }
+  const acceptTypes = Array.isArray(settings.accept_types) ? settings.accept_types : [];
+  if (!acceptTypes.includes('ltiResourceLink')) {
+    throw new LtiError('DEEP_LINK_INVALID', 'This Canvas placement cannot receive a VAuLT experience.', {
+      status: 400,
+      detail: `accept_types=${acceptTypes.join(',').slice(0, 100)}`,
+    });
+  }
+  return {
+    ...common,
+    messageType: 'LtiDeepLinkingRequest',
+    deepLinking: { returnUrl: String(returnUrl), data: settings.data === undefined ? null : settings.data },
+  };
 }
 
 /**
