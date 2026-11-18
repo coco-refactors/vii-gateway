@@ -203,13 +203,10 @@ async function renderLaunchPage(session, experience, attemptState) {
   });
 }
 
-/**
- * Builds the instructor quest picker.
- * Each form includes the instructor's session token to authorize the selection.
- */
-function renderQuestSelector(session) { // INTERIM: replaced by the Vii-backed picker
-  const listHtml = vaultClient
-    .getQuestCatalog()
+/** One row per Vii experience; `hidden` are the form's hidden fields (already safe values). */
+function experienceList(experiences, action, hidden) {
+  if (!experiences.length) return '<p>No experiences are available in VAuLT yet.</p>';
+  return experiences
     .map(
       (q) => `
       <div class="quest-item">
@@ -217,20 +214,63 @@ function renderQuestSelector(session) { // INTERIM: replaced by the Vii-backed p
           <h3>${escapeHtml(q.name)}</h3>
           <p>${escapeHtml(q.description)}</p>
         </div>
-        <form method="POST" action="/lti/select-quest">
-          <input type="hidden" name="token" value="${escapeHtml(session.statusToken)}">
-          <input type="hidden" name="quest_id" value="${q.id}">
-          <button type="submit" class="btn">Assign Quest</button>
+        <form method="POST" action="${action}">
+          ${Object.entries(hidden).map(([k, v]) => `<input type="hidden" name="${k}" value="${escapeHtml(v)}">`).join('')}
+          <input type="hidden" name="quest_id" value="${Number(q.id)}">
+          <button type="submit" class="btn">Choose</button>
         </form>
-      </div>
-    `
+      </div>`
     )
     .join('');
+}
 
+/** Course-navigation (or other unbound) link: the instructor binds an experience to it. */
+function renderQuestSelector(session, experiences, notice = '') {
   return fillTemplate(selectQuestTemplate, {
-    assignmentTitle: 'this link', // no assignment titles are read or stored
-    questListHtml: listHtml,
+    heading: 'Choose the VAuLT experience for this link',
+    subtitle: 'Students who open this link will play the experience you choose.',
+    notice,
+    questListHtml: experienceList(experiences, '/lti/select-quest', { token: session.statusToken }),
   });
+}
+
+/** Deep Linking: the instructor picks the experience for the new assignment. */
+function renderDeepLinkPicker(txId, experiences) {
+  return fillTemplate(selectQuestTemplate, {
+    heading: 'Add a VAuLT experience',
+    subtitle: 'Canvas will create the assignment and its gradebook column for the experience you choose.',
+    notice: '',
+    questListHtml: experienceList(experiences, '/lti/deep-link/select', { dl: txId }),
+  });
+}
+
+/** Plain message page (used when a link has no experience, or its experience is gone). */
+function renderMessage(title, message) {
+  return `<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>VAuLT</title></head>
+<body style="font-family: sans-serif; padding: 32px; color: #1e293b; background: #f8fafc;">
+  <div style="max-width: 600px; margin: 0 auto; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px;">
+    <h2 style="margin-top: 0;">${escapeHtml(title)}</h2>
+    <p>${escapeHtml(message)}</p>
+  </div>
+</body></html>`;
+}
+
+/** Vii experience list, or a clear "VAuLT unavailable" page if Vii cannot be reached. */
+async function experiencesOrFail() {
+  try {
+    return await vaultClient.getExperiences();
+  } catch (err) {
+    throw new LtiError('VII_UNAVAILABLE', 'VAuLT is not reachable right now. Please try again in a minute.', { status: 503 });
+  }
+}
+
+async function experienceOrFail(questId) {
+  try {
+    return await vaultClient.findExperience(questId);
+  } catch (err) {
+    throw new LtiError('VII_UNAVAILABLE', 'VAuLT is not reachable right now. Please try again in a minute.', { status: 503 });
+  }
 }
 
 /**
@@ -284,33 +324,46 @@ router.post(
       nrpsUrl: launch.nrpsUrl,
     };
 
-    // INTERIM: which experience comes from the link's custom quest_id, else
-    // the experience bound to this link; the Vii lookup, "no experience" handling and attempt state land later.
-    let questId =
-      launch.customQuestId ||
-      sessionStore.getQuestForResource(platform.issuer, launch.deploymentId, launch.resourceLinkId);
-
-    // Show the quest picker when an instructor launches an unassigned quest.
-    if (!questId && launch.isInstructor) {
-      const instructorSession = sessionStore.createSession({ ...sessionFields, questId: null });
-      return noStore(res).send(renderQuestSelector(instructorSession));
+    // Which experience? 1) the link's custom quest_id (set by Deep Linking, signed by Canvas),
+    // 2) the experience an instructor bound to this link, 3) none.
+    const fromLink = launch.customQuestId;
+    const questId = fromLink || sessionStore.getQuestForResource(platform.issuer, launch.deploymentId, launch.resourceLinkId);
+    let experience = null;
+    if (questId) {
+      experience = await experienceOrFail(questId);
+      if (!experience) {
+        // The experience was deleted or deactivated in Vii (wrong or missing association).
+        if (launch.isInstructor && !fromLink) {
+          const session = sessionStore.createSession({ ...sessionFields, questId: null });
+          const notice = `<p style="color:#b91c1c;">The experience previously chosen for this link (#${Number(questId)}) is no longer available. Choose another.</p>`;
+          return noStore(res).send(renderQuestSelector(session, await experiencesOrFail(), notice));
+        }
+        return noStore(res).send(
+          launch.isInstructor
+            ? renderMessage('Experience not available', `The VAuLT experience linked to this assignment (#${Number(questId)}) no longer exists or is inactive. Edit the assignment and choose another experience.`)
+            : renderMessage('Experience not available', 'The VAuLT experience for this assignment is not available right now. Please tell your instructor.')
+        );
+      }
+    }
+    if (!experience) {
+      if (launch.isInstructor) {
+        const session = sessionStore.createSession({ ...sessionFields, questId: null });
+        return noStore(res).send(renderQuestSelector(session, await experiencesOrFail()));
+      }
+      return noStore(res).send(
+        renderMessage('Open this from an assignment', 'This link is not set up with a VAuLT experience. Please open the experience from its assignment in your course.')
+      );
     }
 
-    // Still unassigned (students): default quest until it gets replaced with a clear message.
-    if (!questId) {
-      questId = config.defaultQuestId;
-    }
-
-    const session = sessionStore.createSession({ ...sessionFields, questId });
-    const experience = await vaultClient.getQuestDetails(questId);
-    const attemptState = await vaultClient.getAttemptState(session.vaultUsername, questId);
+    const session = sessionStore.createSession({ ...sessionFields, questId: experience.id });
+    const attemptState = await vaultClient.getAttemptState(session.vaultUsername, experience.id);
     noStore(res).send(await renderLaunchPage(session, experience, attemptState));
   })
 );
 
 /**
- * Validates the instructor session and selected quest,
- * then saves the quest choice for that Canvas assignment.
+ * Instructor binds an experience to an unbound link (e.g. course navigation). Requires the status token
+ * of a verified instructor launch; binds only the link that launch came from.
  */
 router.post(
   '/select-quest',
@@ -318,20 +371,20 @@ router.post(
     const { token, quest_id: questIdRaw } = req.body || {};
     const session = sessionStore.getByStatusToken(token);
     if (!session || session.role !== 'instructor' || !session.resourceLinkId) {
-      throw new LtiError('FORBIDDEN', 'Only an instructor launched from Canvas can assign a quest.', { status: 403 });
+      throw new LtiError('FORBIDDEN', 'Only an instructor launched from Canvas can choose the experience.', { status: 403 });
     }
-    const quest = vaultClient.findQuest(questIdRaw);
-    if (!quest) {
-      throw new LtiError('QUEST_INVALID', 'That quest does not exist.', { status: 400 });
+    const experience = await experienceOrFail(questIdRaw);
+    if (!experience) {
+      throw new LtiError('QUEST_INVALID', 'That experience does not exist.', { status: 400 });
     }
 
-    sessionStore.bindQuestToResource(session.issuer, session.deploymentId, session.resourceLinkId, quest.id);
-    sessionStore.updateSession(session.id, { questId: quest.id });
+    sessionStore.bindQuestToResource(session.issuer, session.deploymentId, session.resourceLinkId, experience.id);
+    sessionStore.updateSession(session.id, { questId: experience.id });
 
     noStore(res).send(`
     <div style="font-family: sans-serif; padding: 32px; text-align: center; color: #166534; background: #f0fdf4; border-radius: 12px; margin: 30px auto; max-width: 600px;">
-      <h2>✓ Quest Assigned Successfully!</h2>
-      <p>This Canvas assignment has been linked to <strong>${escapeHtml(quest.name)}</strong>. Please refresh or reopen the assignment.</p>
+      <h2>✓ Experience chosen</h2>
+      <p>This link now opens <strong>${escapeHtml(experience.name)}</strong>. Reload the page to preview it.</p>
     </div>
   `);
   })

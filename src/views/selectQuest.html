@@ -93,13 +93,9 @@
         <div class="container">
         <div class="card">
             <span class="badge">Instructor Setup</span>
-            <h1>Select a Quest for this Canvas Assignment</h1>
-            <p class="subtitle">Assignment: <strong>{{assignmentTitle}}</strong></p>
-
-            <p style="color: #475569; font-size: 15px; margin-bottom: 24px;">
-            Choose which VAuLT Quest students should complete when opening this assignment in Canvas:
-            </p>
-
+            <h1>{{heading}}</h1>
+            <p class="subtitle">{{subtitle}}</p>
+            {{notice}}
             <div class="quest-list">
             {{questListHtml}}
             </div>
